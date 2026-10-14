@@ -79,6 +79,19 @@ def list_mics(backend=None) -> list[dict]:
     return out
 
 
+def describe(e: BaseException) -> str:
+    """利用者に見せる 1 行。文が空のエラー（soundcard の assert など）でも、種類と止まった場所が分かるようにする。"""
+    import traceback
+    msg = str(e) or type(e).__name__
+    tb = traceback.extract_tb(e.__traceback__)
+    if tb:
+        f = tb[-1]
+        where = f"{Path(f.filename).name}:{f.lineno}"
+        code = (f.line or "").strip()
+        msg = f"{type(e).__name__}: {msg if str(e) else ''} [{where}] {code}".replace(":  [", " [")
+    return msg[:400]
+
+
 def _db(x) -> float:
     """ピークの dBFS。"""
     import numpy as np
@@ -170,7 +183,7 @@ class Recorder:
         except RecorderError as e:
             self.error = str(e)
         except Exception as e:  # noqa: BLE001 — 途中で抜かれた・使えなくなった、など。録れた所までは残す
-            self.error = f"録音が止まりました: {e}"
+            self.error = f"録音が止まりました: {describe(e)}"
         finally:
             if wf is not None:
                 try:
