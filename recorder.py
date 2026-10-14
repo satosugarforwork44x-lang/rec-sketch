@@ -51,7 +51,7 @@ def load_backend():
         raise RecorderError(f"録音には soundcard と numpy が必要です（{e.name} が入っていません）。"
                             "コマンドプロンプトで py -m pip install soundcard numpy を実行して、Hub を再起動してください") from None
     except Exception as e:  # noqa: BLE001 — Windows 以外・音の仕組みが無い環境など
-        raise RecorderError(f"録音の仕組みを使えません: {e}") from None
+        raise RecorderError(f"録音の仕組み（soundcard）を使えません: {type(e).__name__}: {e}") from None
     return soundcard
 
 

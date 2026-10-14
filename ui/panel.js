@@ -103,7 +103,8 @@ export async function mount(el, ctx) {
 
   async function loadMics() {
     let list = [];
-    try { list = await ctx.call("mics"); } catch (e) { $(".rc-note").textContent = e.message; }
+    try { list = await ctx.call("mics"); st.micError = ""; } catch (e) { st.micError = e.message; }
+    drawRec();
     const opts = [{ value: "", label: L.micDefault }, ...list.map((m) => ({ value: m.id, label: m.name }))];
     micBox = selectBox({ options: opts, value: st.prefs.mic || "", onChange: (v) => { st.prefs.mic = v; ctx.call("set_prefs", { mic: v }).catch(() => {}); } });
     $(".rc-mic").replaceChildren(micBox);
@@ -140,8 +141,9 @@ export async function mount(el, ctx) {
     el.querySelectorAll(".rc-src button").forEach((x) => (x.disabled = on));
     $(".rc-title").disabled = on;
     if (micBox) micBox.disabled = on;
-    $(".rc-note").textContent = on ? `${L.keepGoing}${st.rec.source === "both" ? " " + L.headphones : ""}` : st.lastError || "";
-    $(".rc-note").classList.toggle("err", !on && !!st.lastError);
+    const err = st.lastError || st.micError || "";
+    $(".rc-note").textContent = on ? `${L.keepGoing}${st.rec.source === "both" ? " " + L.headphones : ""}` : err;
+    $(".rc-note").classList.toggle("err", !on && !!err);
     ctx.setStatus(on ? `● ${st.rec.file}` : st.folder || "");
     drawMeters();
   }
