@@ -1,0 +1,94 @@
+/* rec.css — レックスケッチ。色は hub.css の変数（テーマ）だけを使う */
+.rc { position: relative; display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+/* 録音のカード */
+.rc-card { display: grid; gap: 12px; margin: 12px 12px 6px; padding: 14px; border-radius: var(--r-l); background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+.rc-src button .icon { width: 15px; height: 15px; }
+.rc-src button:disabled { opacity: .5; cursor: default; }
+.rc-field { display: grid; grid-template-columns: 74px minmax(0, 1fr); align-items: center; gap: 10px; }
+.rc-field > span { color: var(--muted); font-size: 12px; }
+.rc-field .select, .rc-title { width: 100%; box-sizing: border-box; }
+.rc-title {
+  height: 36px; padding: 0 12px; border: 1px solid transparent; border-radius: var(--r); outline: none;
+  background: var(--ink-3); color: var(--text); font: inherit; transition: border-color .12s, background .12s;
+}
+.rc-title:hover { background: var(--ink-4); }
+.rc-title:focus { border-color: var(--signal); }
+.rc-title::placeholder { color: var(--faint); }
+.rc-card .select { background: var(--ink-3); }
+.rc-card .select:hover { background: var(--ink-4); }
+.rc-mic .select:disabled, .rc-title:disabled { opacity: .5; cursor: default; }
+
+.rc-main { display: flex; align-items: center; justify-content: center; gap: 18px; padding: 8px 0 2px; }
+.rc-btn {
+  position: relative; display: grid; place-items: center; width: 68px; height: 68px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--line); background: var(--ink-3); box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
+  transition: transform .12s, background .15s, border-color .15s;
+}
+.rc-btn:hover { background: var(--ink-4); }
+.rc-btn:active { transform: scale(.96); }
+.rc-btn:disabled { opacity: .6; cursor: default; }
+.rc-btn:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+.rc-dot { width: 26px; height: 26px; border-radius: 50%; background: var(--danger); transition: border-radius .18s, width .18s, height .18s; }
+.rc-btn.on { border-color: color-mix(in srgb, var(--danger) 55%, transparent); background: color-mix(in srgb, var(--danger) 12%, var(--ink-3)); }
+.rc-btn.on .rc-dot { width: 22px; height: 22px; border-radius: 5px; }
+.rc-btn.on::after {
+  content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--danger); opacity: .45;
+  animation: rc-pulse 1.6s ease-out infinite;
+}
+@keyframes rc-pulse { from { transform: scale(.94); opacity: .5; } to { transform: scale(1.12); opacity: 0; } }
+.rc-time { min-width: 116px; font: 300 34px/1 var(--font-num); font-variant-numeric: tabular-nums; letter-spacing: .02em; color: var(--muted); }
+.rc-time.on { color: var(--text); }
+
+/* 音量 */
+.rc-meters { display: grid; gap: 6px; }
+.rc-meter { display: grid; grid-template-columns: 40px minmax(0, 1fr) 48px; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
+.rc-meter b { font: 500 11px var(--font-num); font-variant-numeric: tabular-nums; text-align: right; color: var(--faint); }
+.rc-bar { height: 6px; border-radius: 3px; background: var(--well); overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
+.rc-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--signal); transition: width .12s linear; }
+.rc-meter.hot .rc-bar i { background: var(--danger); }
+.rc-note { margin: 0; min-height: 1.4em; font-size: 11.5px; color: var(--faint); text-align: center; }
+.rc-note.err { color: var(--danger); }
+
+/* 一覧 */
+.rc-listhead { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px 4px 16px; font-size: 11px; font-weight: 600; letter-spacing: .1em; color: var(--faint); }
+.rc-list { flex: 1; min-height: 80px; overflow: auto; padding: 0 8px 8px; }
+.rc-empty { margin: 18px 0; text-align: center; color: var(--faint); font-size: 12px; }
+.rc-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 8px; padding: 6px 8px; border-radius: var(--r); }
+.rc-item:hover { background: var(--ink-2); }
+.rc-item.playing { background: var(--tint); }
+.rc-name { display: grid; min-width: 0; }
+.rc-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 12.5px; }
+.rc-name span { font: 11px var(--font-num); color: var(--faint); font-variant-numeric: tabular-nums; }
+.rc-act .btn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; font-size: 12px; }
+.rc-act .btn .icon { width: 14px; height: 14px; }
+.rc-prog { grid-column: 2 / -1; display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
+.rc-prog-bar { height: 4px; border-radius: 2px; background: var(--well); overflow: hidden; }
+.rc-prog-bar i { display: block; height: 100%; background: var(--signal); transition: width .3s; }
+
+/* 文字起こしの設定（右下はパネルの大きさを変えるつまみの場所なので空けておく） */
+.rc-foot { display: grid; gap: 6px; padding: 8px 28px 10px 12px; border-top: 1px solid var(--line); }
+.rc-foot-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rc-foot-h { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--faint); white-space: nowrap; }
+.rc-foot-h .icon { width: 14px; height: 14px; }
+.rc-model { flex: 1; min-width: 0; }
+.rc-model .select { width: 100%; }
+.rc-lang .select { width: 96px; }
+.rc-w { flex: 1; min-width: 0; font-size: 11px; line-height: 1.4; color: var(--danger); }
+.rc-w.muted { color: var(--faint); }
+.rc-find { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; font-size: 11.5px; white-space: nowrap; }
+.rc-find .icon { width: 13px; height: 13px; }
+
+/* 初回のお知らせ */
+.rc-consent { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; background: color-mix(in srgb, var(--ink) 70%, transparent); backdrop-filter: blur(4px); z-index: 5; }
+.rc-consent[hidden] { display: none; }
+.rc-consent-box { max-width: 320px; padding: 20px; border-radius: var(--r-l); background: var(--solid-2); box-shadow: var(--shadow); }
+.rc-consent-box h2 { margin: 0 0 8px; font-size: 15px; }
+.rc-consent-box p { margin: 0 0 10px; font-size: 12.5px; line-height: 1.6; }
+.rc-consent-box .rc-sub { color: var(--muted); font-size: 11.5px; }
+.rc-consent-box .btn-row { justify-content: flex-end; margin-top: 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rc-btn.on::after { animation: none; }
+  .rc-btn, .rc-dot, .rc-bar i, .rc-prog-bar i { transition: none; }
+}

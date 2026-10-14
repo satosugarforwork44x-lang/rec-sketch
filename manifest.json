@@ -1,0 +1,33 @@
+{
+  "id": "rec",
+  "name": "レックスケッチ",
+  "version": "0.1.0",
+  "summary": "マイクと PC の音（Web 会議の相手）を録って WAV に残し、PC の中で文字にする。Claude が読んで議事録にまとめられる",
+  "kind": "panel",
+  "runtime": "python",
+  "api": "api.py",
+  "visibility": "public",
+  "requires": { "hub": ">=0.9", "moduleApi": 1 },
+  "hub": {
+    "window": "panel",
+    "size": [420, 680],
+    "ui": "ui/panel.js",
+    "tile": { "icon": "voiceMemo" },
+    "status": { "fn": "status", "every": 5 },
+    "blob": "blob_path"
+  },
+  "exports": [
+    { "fn": "state", "summary": "保存先・録音の一覧・今の録音・文字起こしの状態" },
+    { "fn": "live", "summary": "録音中の経過・音量と文字起こしの進み具合" },
+    { "fn": "mics", "summary": "マイクの一覧" },
+    { "fn": "start", "summary": "録音を始める（マイク / マイク＋PC の音）" },
+    { "fn": "stop", "summary": "録音を止めて保存する" },
+    { "fn": "set_prefs", "summary": "入力・マイク・文字起こしのモデルと言語を覚える" },
+    { "fn": "consent", "summary": "初回のお知らせ（参加者の同意）を読んだ" },
+    { "fn": "transcribe", "summary": "録音を文字にする（faster-whisper、別のプロセス）" },
+    { "fn": "transcribe_cancel", "summary": "文字起こしをやめる" },
+    { "fn": "whisper_find", "summary": "faster-whisper の入った Python を探し直す" },
+    { "fn": "status", "summary": "バーに出す録音の経過（録音していなければ null）" }
+  ],
+  "locales": { "en": { "name": "Rec Sketch", "summary": "Record your mic and your PC's sound (the other side of a web meeting) to WAV, and transcribe it on your PC. Claude can read the text and write the minutes" } }
+}

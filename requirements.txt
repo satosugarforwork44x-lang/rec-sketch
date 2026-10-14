@@ -1,0 +1,5 @@
+# 録音に必要（どちらも BSD-3-Clause）
+soundcard>=0.4.4      # Windows の WASAPI でマイクと PC の音（ループバック）を録る
+numpy>=1.24
+# 文字起こし（任意）。無くても録音は使える。Hub と別の Python に入れてもよい（自動で探す）
+faster-whisper>=1.0   # MIT（中の CTranslate2 も MIT、Whisper のモデルも MIT）
