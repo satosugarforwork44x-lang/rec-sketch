@@ -220,3 +220,44 @@ class TranscribeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MixFormatPatchTest(unittest.TestCase):
+    """機器の形式が soundcard の想定と違う（assert で止まる）ときに、float32 の形式を作って渡すこと。"""
+
+    def test_falls_back_to_own_float32_format(self):
+        import struct
+        import types
+        rec = _load("rec_recorder_patch_test", "recorder.py")
+        seen = {}
+
+        class _Vtbl:
+            def Initialize(self, this, share, flags, duration, period, fmt, guid):
+                seen.update(share=share, flags=flags, fmt=bytes(fmt))
+                return 0
+
+        class _Ptr:
+            lpVtbl = _Vtbl()
+
+        class _AudioClient:
+            def __init__(self, ptr, samplerate, channels, blocksize, isloopback, exclusive_mode=False):
+                assert False   # soundcard の形式の確かめに通らなかった、のまね
+
+            deviceperiod = (0.01, 0.003)
+
+        mf = types.SimpleNamespace(
+            _AudioClient=_AudioClient,
+            _ffi=types.SimpleNamespace(new=lambda t, b: bytearray(b), cast=lambda t, b: b, NULL=None),
+            _ole32=types.SimpleNamespace(AUDCLNT_SHAREMODE_SHARED=0, AUDCLNT_SHAREMODE_EXCLUSIVE=1),
+            _com=types.SimpleNamespace(check_error=lambda hr: None))
+        sys.modules["soundcard.mediafoundation"] = mf
+        try:
+            rec._patch_mix_format()
+            c = _AudioClient([[_Ptr()]], 48000, 1, 24000, True)
+        finally:
+            del sys.modules["soundcard.mediafoundation"]
+        tag, ch, sr, avg, align, bits, cb, valid, mask, guid = struct.unpack("<HHIIHHHHI16s", seen["fmt"])
+        self.assertEqual((tag, ch, sr, avg, align, bits, cb, valid, mask), (0xFFFE, 1, 48000, 192000, 4, 32, 22, 32, 4))
+        self.assertEqual(guid.hex(), "0300000000001000800000aa00389b71")
+        self.assertTrue(seen["flags"] & 0x00020000)          # ループバック
+        self.assertEqual((c.samplerate, c.channelmap), (48000, [0]))

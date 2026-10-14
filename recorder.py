@@ -52,7 +52,57 @@ def load_backend():
                             "コマンドプロンプトで py -m pip install soundcard numpy を実行して、Hub を再起動してください") from None
     except Exception as e:  # noqa: BLE001 — Windows 以外・音の仕組みが無い環境など
         raise RecorderError(f"録音の仕組み（soundcard）を使えません: {type(e).__name__}: {e}") from None
+    _patch_mix_format()
     return soundcard
+
+
+# ---------- soundcard の補い ----------
+# soundcard は機器の形式（GetMixFormat）が WAVEFORMATEXTENSIBLE・float32 であることを assert で確かめ、
+# 違うと文の無い AssertionError で止まる（例: EMEET SmartCam C960 のマイク）。
+# そのときだけ、こちらで float32 の形式を作って Windows に渡し、変換は Windows に任せる（AUTOCONVERTPCM）。
+_IEEE_FLOAT = bytes.fromhex("0300000000001000800000aa00389b71")   # KSDATAFORMAT_SUBTYPE_IEEE_FLOAT（GUID のバイト列）
+
+
+def _patch_mix_format() -> None:
+    import sys
+    mf = sys.modules.get("soundcard.mediafoundation")
+    cls = getattr(mf, "_AudioClient", None) if mf else None
+    if cls is None or getattr(cls, "_rec_sketch_patched", False):
+        return
+    original = cls.__init__
+
+    def __init__(self, ptr, samplerate, channels, blocksize, isloopback, exclusive_mode=False):
+        try:
+            original(self, ptr, samplerate, channels, blocksize, isloopback, exclusive_mode)
+        except AssertionError:
+            _init_float32(mf, self, ptr, samplerate, channels, blocksize, isloopback, exclusive_mode)
+
+    cls.__init__ = __init__
+    cls._rec_sketch_patched = True
+
+
+def _init_float32(mf, self, ptr, samplerate, channels, blocksize, isloopback, exclusive_mode) -> None:
+    """soundcard の _AudioClient.__init__ と同じことを、形式だけ自分で作って行う。"""
+    import struct
+    self._ptr = ptr
+    self.channelmap = list(range(channels)) if isinstance(channels, int) else list(channels)
+    if blocksize is None:
+        blocksize = self.deviceperiod[0] * samplerate
+    n = len(set(self.channelmap))
+    sr = int(samplerate)
+    mask = 0x4 if n == 1 else (1 << n) - 1                       # 1ch は中央、それ以外は前から順に
+    raw = struct.pack("<HHIIHHHHI16s", 0xFFFE, n, sr, sr * n * 4, n * 4, 32, 22, 32, mask, _IEEE_FLOAT)
+    self._rec_sketch_fmt = mf._ffi.new("char[]", raw)            # Initialize の間、消えないように持っておく
+    share = mf._ole32.AUDCLNT_SHAREMODE_EXCLUSIVE if exclusive_mode else mf._ole32.AUDCLNT_SHAREMODE_SHARED
+    flags = 0x00100000 | 0x80000000 | 0x08000000 | 0x00080000    # 変換・混ぜ直し・良い変換・設定を残さない
+    if isloopback:
+        flags |= 0x00020000
+    duration = int(blocksize / samplerate * 10_000_000)
+    hr = self._ptr[0][0].lpVtbl.Initialize(self._ptr[0], share, flags, duration, 0,
+                                           mf._ffi.cast("WAVEFORMATEXTENSIBLE *", self._rec_sketch_fmt), mf._ffi.NULL)
+    mf._com.check_error(hr)
+    self.samplerate = samplerate
+    self._idle_start_time = None
 
 
 def list_mics(backend=None) -> list[dict]:
