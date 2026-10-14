@@ -142,6 +142,16 @@ def describe(e: BaseException) -> str:
     return msg[:400]
 
 
+PRIVACY_HINT = ("。Windows の 設定 → プライバシーとセキュリティ → マイク で「マイクへのアクセス」と"
+                "「デスクトップ アプリがマイクにアクセスできるようにする」が オン か確かめてください")
+
+
+def privacy_hint(e: BaseException) -> str:
+    """マイクが許可されていないと、Windows は形式を隠したり（soundcard の assert で止まる）、
+    E_ACCESSDENIED（0x80070005）を返したりする。そのときは設定の場所を添える。"""
+    return PRIVACY_HINT if isinstance(e, AssertionError) or "0x80070005" in str(e).lower() else ""
+
+
 def _db(x) -> float:
     """ピークの dBFS。"""
     import numpy as np
@@ -233,7 +243,7 @@ class Recorder:
         except RecorderError as e:
             self.error = str(e)
         except Exception as e:  # noqa: BLE001 — 途中で抜かれた・使えなくなった、など。録れた所までは残す
-            self.error = f"録音が止まりました: {describe(e)}"
+            self.error = f"録音が止まりました: {describe(e)}{privacy_hint(e)}"
         finally:
             if wf is not None:
                 try:
