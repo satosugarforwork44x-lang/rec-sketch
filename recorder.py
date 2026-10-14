@@ -2,7 +2,9 @@
 
 ・soundcard（BSD-3-Clause）で Windows の WASAPI から録る。マイクだけ（1ch）か、マイク＋PC の音（2ch: 左=自分・右=相手）
 ・少しずつ WAV に書く（標準の wave）。wave は書くたびにヘッダーの長さを直すので、Hub が落ちても途中までは聞ける
-・WASAPI は COM を使う。Hub の画面のスレッドとは別に、録るスレッドの中で COM を始めてから soundcard を読み込む
+・WASAPI は COM を使う。録るスレッドの中で COM を始める（Hub の画面のスレッドとは別）
+  順番に注意: soundcard は読み込むときに自分で CoInitializeEx し、「もう始まっている（S_FALSE）」を
+  エラー 0x100000001 として投げる。だから soundcard を先に読み込み、そのあとで com_thread() に入る
 """
 from __future__ import annotations
 
@@ -60,8 +62,8 @@ def list_mics(backend=None) -> list[dict]:
 
     def run():
         try:
+            sc = backend or load_backend()     # 先に読み込む（下の com_thread より後だと 0x100000001 になる）
             with com_thread():
-                sc = backend or load_backend()
                 default = sc.default_microphone()
                 for m in sc.all_microphones(include_loopback=False):
                     out.append({"id": str(m.id), "name": m.name, "default": default is not None and m.id == default.id})
@@ -141,8 +143,8 @@ class Recorder:
         import numpy as np
         wf = None
         try:
+            sc = self._backend or load_backend()
             with com_thread():
-                sc = self._backend or load_backend()
                 mic, loop = self._devices(sc)
                 with contextlib.ExitStack() as stack:
                     rm = stack.enter_context(mic.recorder(samplerate=RATE, channels=1, blocksize=BUFFER))
