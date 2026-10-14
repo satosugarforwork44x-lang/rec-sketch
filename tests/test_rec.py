@@ -210,6 +210,9 @@ class TranscribeTest(unittest.TestCase):
                               [{"start": 3725, "end": 3726, "who": "自分", "text": "以上です"}])
         self.assertIn("[01:02:05] 自分: 以上です", md)
         self.assertIn("自分＝マイク／相手＝PC の音", md)
+        en = self.t.render_md("Weekly", "a.wav", 5, True, "small", "en", [{"start": 1, "end": 2, "who": "Me", "text": "Hi"}])
+        self.assertIn("[00:00:01] Me: Hi", en)
+        self.assertIn("Me = microphone", en)
 
     def test_check_without_whisper_says_no(self):
         import subprocess

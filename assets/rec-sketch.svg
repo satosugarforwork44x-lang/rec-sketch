@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="168" height="168" viewBox="0 0 168 168" role="img" aria-label="Rec Sketch">
+  <!-- Rec Sketch のロゴ: Hub と同じ地に、声の波形。録音の点は Hub のグラデーション -->
+  <defs>
+    <linearGradient id="bar" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2FC6C0"/><stop offset=".5" stop-color="#4F7DF3"/><stop offset="1" stop-color="#8D6CF2"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1A1E29"/><stop offset="1" stop-color="#090A0E"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy="0" r=".7">
+      <stop offset="0" stop-color="#6E7CF5" stop-opacity=".55"/><stop offset="1" stop-color="#6E7CF5" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="4" y="4" width="160" height="160" rx="38" fill="url(#body)"/>
+  <rect x="4" y="4" width="160" height="110" rx="38" fill="url(#glow)"/>
+  <rect x="4.5" y="4.5" width="159" height="159" rx="37.5" fill="none" stroke="#FFFFFF" stroke-opacity=".12"/>
+  <path d="M30 74v20M45 58v52M60 44v80M75 62v44M90 70v28" fill="none" stroke="#ECEEF3" stroke-opacity=".92" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="121" cy="84" r="14" fill="url(#bar)"/>
+  <circle cx="121" cy="84" r="21" fill="none" stroke="url(#bar)" stroke-width="3" stroke-opacity=".55"/>
+</svg>

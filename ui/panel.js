@@ -7,7 +7,7 @@ import { icons } from "/ui/js/icons.js";
 const EN = (document.documentElement.lang || navigator.language || "ja").startsWith("en");
 const L = EN ? {
   mic: "Mic", both: "Mic + PC sound", micDev: "Microphone", micDefault: "Default (Windows)", title: "Name (optional)",
-  titlePh: "e.g. Weekly meeting", start: "Start recording", stop: "Stop and save", me: "You", them: "PC",
+  titlePh: "e.g. Weekly meeting", start: "Start recording", stop: "Stop and save", me: "Me", them: "Them",
   bothTip: "Records the other side of a web meeting too. Saved as 2 channels: left = you, right = PC sound",
   keepGoing: "Recording continues even if you close this window.", headphones: "Tip: use headphones so the other side's voice isn't picked up twice.",
   saved: (f) => `Saved ${f}`, stopped: "Recording stopped", list: "Recordings", empty: "No recordings yet",
@@ -86,6 +86,7 @@ export async function mount(el, ctx) {
       <div class="btn-row"><button class="btn primary rc-ok" type="button">${L.ok}</button></div></div></div>
   </div>`;
   const $ = (s) => el.querySelector(s);
+  if (EN) el.querySelector(".rc").style.setProperty("--rc-lab", "112px");   // 英語は見出しが長い
   const audio = new Audio();
   let st = null, playing = null, fastTimer = 0, slowTimer = 0, lastJob = null, micBox = null;
 
@@ -178,7 +179,7 @@ export async function mount(el, ctx) {
         : f.text ? `<button class="btn rc-open" type="button" title="${esc(f.text)}">${icons.transcript}<span>${L.openText}</span></button>`
         : ok ? `<button class="btn rc-totext" type="button"${job?.state === "running" ? " disabled" : ""}>${icons.text}<span>${L.toText}</span></button>` : "";
       const prog = busy ? `<div class="rc-prog"><div class="rc-prog-bar"><i style="width:${Math.round((job.progress || 0) * 100)}%"></i></div>
-        <span>${esc(L.stage[job.stage] || L.stage.start)}${job.who ? `（${esc(job.who)}）` : ""} ${job.stage === "text" ? Math.round((job.progress || 0) * 100) + "%" : ""}</span></div>` : "";
+        <span>${esc(L.stage[job.stage] || L.stage.start)}${job.who ? (EN ? ` (${esc(job.who)})` : `（${esc(job.who)}）`) : ""} ${job.stage === "text" ? Math.round((job.progress || 0) * 100) + "%" : ""}</span></div>` : "";
       return `<div class="rc-item${playing === f.file ? " playing" : ""}" role="listitem" data-f="${esc(f.file)}">
         <button class="icon-btn rc-play" type="button" title="${playing === f.file ? L.pause : L.play}">${playing === f.file && !audio.paused ? icons.pause : icons.play}</button>
         <div class="rc-name"><b title="${esc(f.file)}">${esc(f.name)}</b><span>${esc(meta)}</span></div>

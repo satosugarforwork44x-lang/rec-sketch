@@ -23,7 +23,7 @@ import wave
 from pathlib import Path
 
 MODELS = ("small", "medium", "large-v3-turbo")
-LABELS = ("自分", "相手")
+LABELS = {"ja": ("自分", "相手"), "en": ("Me", "Them")}   # 英語で起こすときは見出しも英語
 SILENT_RMS = 1e-4           # これより静かなチャンネルは起こさない（PC の音が無かった録音など）
 MERGE_GAP = 2.0             # 同じ人の発言が 2 秒以内に続くときは 1 段落にまとめる
 
@@ -78,14 +78,24 @@ def _cjk(ch: str) -> bool:
 
 
 def render_md(title: str, wav_name: str, seconds: float, two: bool, model: str, lang: str, items: list[dict]) -> str:
-    head = [f"# {title}", "",
-            f"- 録音: {wav_name}（{stamp(seconds)}、{'マイク＋PC の音' if two else 'マイク'}）",
-            f"- 文字起こし: faster-whisper {model}（{lang or '自動'}）、{time.strftime('%Y-%m-%d %H:%M')}"]
-    if two:
-        head.append("- 話者: 自分＝マイク／相手＝PC の音（声で聞き分けたのではなく、録った入口で分けています）")
-    head += ["- 自動の文字起こしです。固有名詞・数字は録音で確かめてください", "", "---", ""]
+    if lang == "en":
+        head = [f"# {title}", "",
+                f"- Recording: {wav_name} ({stamp(seconds)}, {'mic + PC sound' if two else 'mic'})",
+                f"- Transcribed: faster-whisper {model} (en), {time.strftime('%Y-%m-%d %H:%M')}"]
+        if two:
+            head.append("- Speakers: Me = microphone / Them = PC sound (split by input, not by voice)")
+        head += ["- Automatic transcript. Check names and numbers against the recording", "", "---", ""]
+        empty = "(No speech was found)"
+    else:
+        head = [f"# {title}", "",
+                f"- 録音: {wav_name}（{stamp(seconds)}、{'マイク＋PC の音' if two else 'マイク'}）",
+                f"- 文字起こし: faster-whisper {model}（{lang or '自動'}）、{time.strftime('%Y-%m-%d %H:%M')}"]
+        if two:
+            head.append("- 話者: 自分＝マイク／相手＝PC の音（声で聞き分けたのではなく、録った入口で分けています）")
+        head += ["- 自動の文字起こしです。固有名詞・数字は録音で確かめてください", "", "---", ""]
+        empty = "（文字にできる声がありませんでした）"
     body = [f"[{stamp(i['start'])}] " + (f"{i['who']}: " if i.get("who") else "") + i["text"] for i in items]
-    return "\n".join(head + (body or ["（文字にできる声がありませんでした）"])) + "\n"
+    return "\n".join(head + (body or [empty])) + "\n"
 
 
 def write_atomic(path: Path, text: str) -> None:
@@ -165,7 +175,7 @@ def run(wav: Path, out: Path, model_name: str, lang: str, title: str) -> int:
         model = WhisperModel(model_name, device="cpu", compute_type="int8")
     except Exception as e:  # noqa: BLE001 — 初回の取得に失敗したとき（ネットにつながっていない、など）
         raise RuntimeError(f"モデル {model_name} を読み込めません（初回はネットから取得します。つながっているか確かめてください）: {e}") from None
-    labels = LABELS if two else (None,)
+    labels = LABELS["en" if lang == "en" else "ja"] if two else (None,)
     found: list[list[dict]] = []
     for ci, (audio, who) in enumerate(zip(chans, labels)):
         segs: list[dict] = []

@@ -5,7 +5,7 @@
 .rc-card { display: grid; gap: 12px; margin: 12px 12px 6px; padding: 14px; border-radius: var(--r-l); background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
 .rc-src button .icon { width: 15px; height: 15px; }
 .rc-src button:disabled { opacity: .5; cursor: default; }
-.rc-field { display: grid; grid-template-columns: 74px minmax(0, 1fr); align-items: center; gap: 10px; }
+.rc-field { display: grid; grid-template-columns: var(--rc-lab, 74px) minmax(0, 1fr); align-items: center; gap: 10px; }
 .rc-field > span { color: var(--muted); font-size: 12px; }
 .rc-field .select, .rc-title { width: 100%; box-sizing: border-box; }
 .rc-title {
@@ -42,7 +42,7 @@
 
 /* 音量 */
 .rc-meters { display: grid; gap: 6px; }
-.rc-meter { display: grid; grid-template-columns: 40px minmax(0, 1fr) 48px; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
+.rc-meter { display: grid; grid-template-columns: 44px minmax(0, 1fr) 48px; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
 .rc-meter b { font: 500 11px var(--font-num); font-variant-numeric: tabular-nums; text-align: right; color: var(--faint); }
 .rc-bar { height: 6px; border-radius: 3px; background: var(--well); overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
 .rc-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--signal); transition: width .12s linear; }
@@ -73,7 +73,7 @@
 .rc-foot-h .icon { width: 14px; height: 14px; }
 .rc-model { flex: 1; min-width: 0; }
 .rc-model .select { width: 100%; }
-.rc-lang .select { width: 96px; }
+.rc-lang .select { width: 112px; }
 .rc-w { flex: 1; min-width: 0; font-size: 11px; line-height: 1.4; color: var(--danger); }
 .rc-w.muted { color: var(--faint); }
 .rc-find { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; font-size: 11.5px; white-space: nowrap; }
