@@ -3,6 +3,7 @@
 // ・録音中は live() を短い間隔で読む（経過と音量）。止まっているときは、文字起こし中だけ 1 秒ごとに読む
 import { TOKEN, selectBox } from "/ui/js/hub.js";
 import { icons } from "/ui/js/icons.js";
+import { mountViewer } from "./viewer.js";
 
 const EN = (document.documentElement.lang || navigator.language || "ja").startsWith("en");
 const L = EN ? {
@@ -24,7 +25,7 @@ const L = EN ? {
   shared: (f) => `Exported ${f}`, shareFailed: "Export failed",
   screen: "Screen", screenTip: "Also keep stills of the screen: automatically when a large part changes and settles, and at once when you press the bookmark key",
   monitorN: (m) => `Display ${m.index} (${m.width}×${m.height})`, markLabel: "Bookmark", markBtn: (k) => `Bookmark (${k})`,
-  marked: "Bookmarked", shotsShow: "Show the screen stills",
+  marked: "Bookmarked", shotsShow: "Look back at the screen stills", lookBack: "Look back",
   screenT: "Before you keep the screen", screenBody: "Stills show whatever is on the display: notifications, chats, other people's faces, passwords. Tell the people on the call, and check the images before you send them to anyone.",
   consentT: "Before you record a meeting", consent: "Tell everyone that you are recording and get their consent. Recordings and text stay on this PC (in the Rec Sketch folder).",
   ok: "OK", claude: "Ask Claude to write the minutes from the .md file (share the Rec Sketch folder in Settings → Claude).",
@@ -47,7 +48,7 @@ const L = EN ? {
   shared: (f) => `共有用に書き出しました: ${f}`, shareFailed: "書き出しに失敗しました",
   screen: "画面も", screenTip: "画面の静止画も残します。広い範囲が変わって止まったときは自動で、しおりのキーを押したときはすぐに",
   monitorN: (m) => `画面 ${m.index}（${m.width}×${m.height}）`, markLabel: "しおり", markBtn: (k) => `しおり（${k}）`,
-  marked: "しおりを付けました", shotsShow: "画面の静止画のフォルダを表示",
+  marked: "しおりを付けました", shotsShow: "画面の静止画を振り返る", lookBack: "振り返り",
   screenT: "画面を残す前に", screenBody: "静止画には、画面に映っている物がそのまま残ります（通知・チャット・ほかの人の顔・パスワードなど）。通話の相手に伝え、人に送る前に中身を確かめてください。",
   consentT: "会議を録る前に", consent: "参加者に録音することを伝えて、同意をもらってください。録音と文字はこの PC の中（Rec Sketch フォルダ）にだけ残ります。",
   ok: "わかりました", claude: "議事録は、.md を Claude に読ませてまとめてもらえます（設定 → Claude 連携 で Rec Sketch フォルダを見せる）。",
@@ -71,6 +72,7 @@ const when = (t) => {
 const pct = (db) => Math.max(0, Math.min(100, ((db + 60) / 60) * 100));   // -60 dB 〜 0 dB を棒に
 
 export async function mount(el, ctx) {
+  if (ctx.instance === "shots") return mountViewer(el, ctx);   // 振り返り窓（別窓）
   el.innerHTML = `<div class="rc">
     <section class="rc-card">
       <div class="seg rc-src" role="radiogroup">
@@ -87,7 +89,8 @@ export async function mount(el, ctx) {
         <div class="rc-time" aria-live="off">00:00</div>
       </div>
       <div class="rc-meters"></div>
-      <div class="rc-live" hidden><button class="btn rc-mark" type="button">${icons.pin}<span></span></button><span class="rc-counts"></span></div>
+      <div class="rc-live" hidden><button class="btn rc-mark" type="button">${icons.pin}<span></span></button>
+        <button class="btn rc-look" type="button" hidden>${icons.image}<span>${L.lookBack}</span></button><span class="rc-counts"></span></div>
       <p class="rc-note"></p>
     </section>
     <div class="rc-listhead"><span>${L.list}</span><button class="icon-btn rc-reveal" type="button" title="${L.openFolder}">${icons.reveal}</button></div>
@@ -170,6 +173,7 @@ export async function mount(el, ctx) {
     if (on) {
       $(".rc-mark span").textContent = L.markBtn(st.rec.markKey || "F9");
       const sc = st.rec.screen || {};
+      $(".rc-look").hidden = !sc.on;
       $(".rc-counts").textContent = sc.on ? `📷 ${(sc.auto || 0) + (sc.mark || 0)} · 🔖 ${st.rec.marks || 0}` : `🔖 ${st.rec.marks || 0}`;
     }
     ctx.setStatus(on ? `● ${st.rec.file}` : st.folder || "");
@@ -254,7 +258,7 @@ export async function mount(el, ctx) {
       } else if (e.target.closest(".rc-open")) {
         await ctx.host.openPath(f.textPath);
       } else if (e.target.closest(".rc-shots")) {
-        await ctx.host.revealPath(f.shotsDir);
+        await openViewer(f.file);
       } else if (e.target.closest(".rc-share")) {
         if (f.m4a) await ctx.host.revealPath(f.m4aPath);
         else { st.share = await ctx.call("share", { file: f.file }); schedule(); }
@@ -311,6 +315,15 @@ export async function mount(el, ctx) {
       } });
     $(".rc-key").replaceChildren(box);
   }
+
+  // 振り返り窓（rec:shots）。どの録音を見るかは窓の中でも選べる
+  async function openViewer(file) {
+    try {
+      await ctx.call("view", { file: file || null });   // 開いている窓も、これを見て切り替わる
+      await ctx.host.openPanel("rec:shots");
+    } catch (e) { ctx.toast(e.message, "error"); }
+  }
+  $(".rc-look").addEventListener("click", () => openViewer(null));
 
   $(".rc-mark").addEventListener("click", async () => {
     try { await ctx.call("mark"); ctx.toast(L.marked, "info", 1500); tick(); } catch (e) { ctx.toast(e.message, "error"); }

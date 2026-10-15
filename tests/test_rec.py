@@ -226,6 +226,43 @@ class RecordTest(unittest.TestCase):
         self.assertGreaterEqual(f["shots"], 1)
         self.assertTrue(Path(f["shotsDir"]).is_dir())
 
+    @unittest.skipIf(importlib.util.find_spec("PIL") is None, "Pillow が無い")
+    def test_look_back_lists_stills_and_serves_only_listed_images(self):
+        fake = _FakeMSS()
+        self.api._screen.load_backend = lambda: fake
+        self.api.start(source="mic", screen=True)
+        time.sleep(0.2)
+        self.api.mark()
+        time.sleep(0.6)
+        live = self.api.shots()
+        self.assertTrue(live["live"])
+        self.assertGreaterEqual(len(live["shots"]), 1)
+        name = self.api.stop()["saved"]
+        d = self.api.shots(name)
+        key = d["shots"][0]["key"]
+        self.assertTrue(self.api.blob_path(f"s|{key}").is_file())
+        th = self.api.blob_path(f"th|{key}")
+        self.assertEqual(th.suffix, ".jpg")
+        for bad in (f"s|{Path(name).stem}|shots.json", f"s|{Path(name).stem}|../x.png", "s|nothing|t000001-mark.png"):
+            with self.assertRaises(self.api.RecError):
+                self.api.blob_path(bad)
+        self.api.view(name)
+        self.assertEqual(self.api.shots()["file"], name)        # 一覧から選んだ録音
+
+    def test_auto_stills_pause_while_look_back_is_open_only_without_hub_support(self):
+        self.api._exclude.update(on=False, supported=False)
+        self.api.viewer_open(True)
+        self.assertFalse(self.api._auto_ok())
+        self.api.viewer_open(False)
+        self.assertTrue(self.api._auto_ok())
+        calls = []
+        self.api._ctx.host.set_capture_excluded = lambda on, owner="": calls.append((on, owner)) or {"on": on, "supported": True}
+        self.api._set_exclude(True)
+        self.api.viewer_open(True)
+        self.assertTrue(self.api._auto_ok())                  # Hub が窓を写さないので止めない
+        self.api._set_exclude(False)
+        self.assertEqual(calls, [(True, "rec"), (False, "rec")])
+
     def test_transcribe_needs_whisper(self):
         name = self._record("mic", 0.2)["saved"]
         self.api._ctx.store.set("rec", "whisper", None)

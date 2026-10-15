@@ -31,6 +31,8 @@ and puts the text **where Claude can read it**.
 
 ![Record the meeting, transcribe it on your PC, let Claude write the minutes](docs/flow.png)
 
+![Look back — re-read an earlier slide while the meeting goes on](docs/lookback.png)
+
 ## UX decisions
 
 | Decision | Why |
@@ -46,6 +48,8 @@ and puts the text **where Claude can read it**.
 | **Stills, not video** | What a meeting needs is "which slide was up when we decided that". Video is heavy and brings encoder licensing headaches; stills are light and Claude can read them directly |
 | **Auto stills only when a large area changes and then settles** | Switching shares, animations and videos never settle, so they're skipped. A face moving in a corner isn't "a large area". Going back to a slide doesn't save it twice |
 | **Bookmark is a single key, F9** (changeable) | Key combos are too much to hit on the spot. It works from any window because it's registered with Windows — **only while recording**, and released when you stop |
+| **Look back in a separate window** | During a meeting you want the current screen and an earlier slide side by side. The panel is too small, so it's a Hub window of its own (position and size are remembered) that you can park on another display |
+| **Hub's windows stay out of the stills** (Hub 0.10+) | Using Hub on the same screen as the meeting doesn't put the look-back window or panels into the stills. On Hub 0.9, automatic stills pause while the look-back window is open instead |
 | **Bookmarks have a button too** | Features that only exist as shortcuts are never found. While recording the panel shows "Bookmark (F9)" and the number of stills and bookmarks |
 | **The screen is only captured while recording with "Screen" on** | Notifications and chats show up on screen. You get a one-time warning and choose which display to capture |
 | **Record in WAV, share in M4A** | WAV is written as it goes (a crash still leaves a playable file) and feeds transcription directly. But an hour of 2-channel audio is about 690 MB, so sharing uses M4A (AAC 64 kbps, mono): about 30 MB, and it plays on Windows, iPhone, Android and Mac |
@@ -59,6 +63,7 @@ and puts the text **where Claude can read it**.
 | Record | Mic only (1 ch) or mic + PC sound (2 ch). 48 kHz / 16-bit WAV. Pick the microphone from a list |
 | Levels | Live level bars for you and the PC sound while recording |
 | Screen | Stills of the chosen display when a large area changes and settles (JPEG), at least 10 s apart |
+| Look back | "Look back" while recording, or 🖼 on a row, opens a separate window: a large image, a strip of timestamped thumbnails, ← →, wheel zoom. While recording it follows the latest still |
 | Bookmark | F9 (or the button) keeps that moment as PNG and marks 🔖 in the transcript. With "Screen" off it's just the mark |
 | Voice memo | Record with "Mic" only. Leave the name empty for `<date> 録音.wav`. Transcribe it just like a meeting |
 | List | Play, transcribe, open the text, export to share, show the folder in Explorer |
@@ -73,6 +78,7 @@ and puts the text **where Claude can read it**.
 | Minutes of a web meeting | Record "Mic + PC sound" → Transcribe → ask Claude for the minutes |
 | Voice memo | Record "Mic" → transcribe if you need text. Ideas, shopping lists, things to do later |
 | Meetings with slides, walkthroughs | Turn on "Screen" → press F9 at the key moments → Transcribe → ask Claude to "focus on the bookmarks" |
+| Re-reading an earlier slide mid-meeting | Open "Look back" and park it on another display (or the edge of the same one). New slides are added as they appear |
 | Sending a recording | ↑ to export M4A → drag the file Explorer shows into an email or chat |
 
 ## Install
@@ -115,6 +121,7 @@ The model is downloaded once on first use (small ≈ 0.5 GB, medium ≈ 1.5 GB, 
 
 - If recording stops right away, check Windows Settings → Privacy & security → Microphone: microphone access and "Let desktop apps access your microphone" must be on.
 - Tell everyone you are recording and get their consent.
+- While recording with "Screen" on (Hub 0.10+), Hub's windows don't show up in other apps' screen sharing or screenshots either. To show Hub in a meeting, record with "Screen" off.
 - Screen stills keep whatever was on the display (notifications, chats, other people's faces, passwords). Check them before sending them to anyone.
 - Automatic transcripts get names and numbers wrong sometimes — check against the audio.
 - Me / Them comes from where the sound was recorded, not from voice recognition. Everyone on the other side is Them.

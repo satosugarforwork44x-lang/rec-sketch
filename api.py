@@ -58,6 +58,9 @@ _watcher = None             # 今の録音の画面（screen.Watcher）。画面
 _keys = None                # 今の録音の全体キー（hotkey.Hotkeys）
 _marks: list[dict] = []     # 画面を入れていない録音のしおり（時刻だけ）
 _key_errors: list[str] = []
+_exclude = {"on": False, "supported": None}   # Hub の窓を画面の取り込みから外しているか（Hub 0.10 以上）
+_viewer_seen = 0.0          # 振り返り窓が最後に「開いている」と知らせた時刻（閉じたのに知らせが来なくても、数秒で戻る）
+VIEWER_TTL = 5.0
 _job: dict = {}             # 今の文字起こし
 _proc: subprocess.Popen | None = None
 _share: dict = {}           # 今の共有用の書き出し
@@ -207,7 +210,8 @@ def live() -> dict:
                "levels": _rec.levels, "started": _rec.started_at, "error": _rec.error,
                "screen": ({"on": True, **_watcher.counts(), "error": _watcher.error} if _watcher is not None else {"on": False}),
                "marks": (_watcher.counts()["mark"] if _watcher is not None else len(_marks)),
-               "markKey": _prefs()["markKey"], "keyErrors": list(_key_errors)}
+               "markKey": _prefs()["markKey"], "keyErrors": list(_key_errors), "exclude": dict(_exclude),
+               "autoPaused": _watcher is not None and not _auto_ok()}
     return {"rec": rec, "lastError": _last_error, "job": dict(_job) if _job else None, "whisper": _whisper_state(),
             "share": dict(_share) if _share else None, "canShare": _share_python() is not None}
 
@@ -253,7 +257,7 @@ def _start_extras(r, screen: bool, monitor: int) -> None:
     global _watcher, _keys, _marks, _key_errors
     _watcher, _marks, _key_errors = None, [], []
     if screen:
-        w = _screen.Watcher(r.path.with_suffix(""), clock=lambda: r.seconds, monitor=monitor)
+        w = _screen.Watcher(r.path.with_suffix(""), clock=lambda: r.seconds, monitor=monitor, auto=_auto_ok)
         try:
             w.start()
             _watcher = w
@@ -262,6 +266,42 @@ def _start_extras(r, screen: bool, monitor: int) -> None:
     keys = _hotkey.Hotkeys({_prefs()["markKey"]: mark})
     _key_errors += keys.start()
     _keys = keys
+    if _watcher is not None:
+        _set_exclude(True)
+
+
+def _set_exclude(on: bool) -> None:
+    """Hub の窓（バー・パネル・振り返り窓）を画面の取り込みから外す / 戻す。Hub 0.10 の口が無ければ何もしない。"""
+    fn = getattr(getattr(_ctx, "host", None), "set_capture_excluded", None)
+    if fn is None:
+        _exclude.update(on=False, supported=False)
+        return
+    try:
+        r = fn(bool(on), owner="rec") or {}
+        _exclude.update(on=bool(r.get("on", on)) and bool(r.get("supported", True)), supported=bool(r.get("supported", True)))
+    except Exception:  # noqa: BLE001 — 外せなくても録音は続ける
+        _exclude.update(on=False, supported=False)
+
+
+def _auto_ok() -> bool:
+    """自動の静止画を残してよいか。Hub の窓を外せないときは、振り返り窓が開いている間だけ止める（窓が写り込むため）。"""
+    return _exclude["on"] or time.time() - _viewer_seen > VIEWER_TTL
+
+
+def viewer_open(on: bool = True) -> dict:
+    """振り返り窓が開いている（数秒ごとに知らせる）/ 閉じた。"""
+    global _viewer_seen
+    _viewer_seen = time.time() if on else 0.0
+    v = _ctx.store.get("rec", "view", {}) or {}
+    return {"exclude": dict(_exclude), "autoPaused": _watcher is not None and not _auto_ok(), "viewRev": v.get("rev", 0)}
+
+
+def view(file: str | None = None) -> dict:
+    """振り返り窓に出す録音を決める（一覧のボタンから）。None なら録音中・最新。開いている窓は viewRev が変わったのを見て読み直す。"""
+    v = _ctx.store.get("rec", "view", {}) or {}
+    v = {"file": Path(str(file)).name if file else None, "rev": int(v.get("rev", 0)) + 1}
+    _ctx.store.set("rec", "view", v)
+    return v
 
 
 def mark() -> dict:
@@ -296,6 +336,7 @@ def stop() -> dict:
         if _watcher is not None:
             _watcher.stop()
             _watcher = None
+            _set_exclude(False)
         r.stop()
         _last_error = r.error
         _rec = None
@@ -314,8 +355,68 @@ def status() -> dict | None:
 
 
 def blob_path(key: str) -> Path:
-    """一覧で聞くための WAV（/blob/rec/<ファイル名>）。保存先の .wav だけ。"""
+    """/blob/rec/<key>: 一覧で聞く WAV（<ファイル名>.wav）、振り返り窓の静止画（s|<録音名>|<画像>）と小さな見本（th|…）。"""
+    key = str(key)
+    if key.startswith(("s|", "th|")):
+        kind, stem, name = (key.split("|") + ["", ""])[:3]
+        img = _shot_path(stem, name)
+        return _thumb(img) if kind == "th" else img
     return _wav(key)
+
+
+def _shot_path(stem: str, name: str) -> Path:
+    """静止画は shots.json に載っている物だけ渡す（ほかのファイルは渡さない）。"""
+    folder = _folder() / Path(stem).name
+    if Path(name).name != name or not any(s.get("file") == name for s in _screen.read_index(folder)):
+        raise RecError("その静止画はありません")
+    p = folder / name
+    if not p.is_file():
+        raise RecError("その静止画はありません")
+    return p
+
+
+def _thumb(img: Path) -> Path:
+    """振り返り窓の帯に出す小さな見本（長辺 320 の JPEG）。data_dir に作って覚えておく。"""
+    from PIL import Image
+    cache = Path(_ctx.data_dir) / "thumbs" / img.parent.name
+    cache.mkdir(parents=True, exist_ok=True)
+    out = cache / (img.stem + ".jpg")
+    if not out.exists() or out.stat().st_mtime < img.stat().st_mtime:
+        with Image.open(img) as im:
+            im = im.convert("RGB")
+            im.thumbnail((320, 320))
+            tmp = out.with_suffix(".tmp")
+            im.save(tmp, format="JPEG", quality=80)
+            os.replace(tmp, out)
+    return out
+
+
+def shots(file: str | None = None) -> dict:
+    """振り返り窓用: 録音の静止画の一覧。file を省くと、録音中ならその録音、無ければ静止画のある最新の録音。"""
+    cur = _rec.path if _rec is not None and _rec.running else None
+    picked = (_ctx.store.get("rec", "view", {}) or {}).get("file")
+    if not file and picked and (_folder() / picked).is_file():
+        file = picked
+    if file:
+        wav = _folder() / Path(str(file)).name
+    elif cur is not None:
+        wav = cur
+    else:
+        wav = next((_folder() / f["file"] for f in _files() if f.get("shots")), None)
+    if wav is None:
+        return {"file": None, "name": None, "shots": [], "live": False, "choices": [], "exclude": dict(_exclude)}
+    items = [{**s, "key": f"{wav.stem}|{s['file']}"} for s in _screen.read_index(wav.with_suffix("")) if s.get("file")]
+    choices = ([{"file": cur.name, "name": cur.stem, "live": True}] if cur is not None else []) + \
+              [{"file": f["file"], "name": f["name"], "live": False} for f in _files() if f.get("shots")]
+    return {"file": wav.name, "name": wav.stem, "dir": str(wav.with_suffix("")), "shots": items,
+            "live": cur is not None and wav == cur, "choices": choices, "exclude": dict(_exclude),
+            "autoPaused": _watcher is not None and not _auto_ok(),
+            "viewRev": (_ctx.store.get("rec", "view", {}) or {}).get("rev", 0)}
+
+
+def instance_title(key: str) -> str:
+    """別窓のタイトル（タスクバーに出る名前）。"""
+    return "振り返り — レックスケッチ" if key == "shots" else f"{key} — レックスケッチ"
 
 
 # ---------- faster-whisper の入った Python を探す ----------

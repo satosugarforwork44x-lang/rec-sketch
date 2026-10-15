@@ -1,7 +1,7 @@
 {
   "id": "rec",
   "name": "レックスケッチ",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "summary": "会議（マイクと PC の音）やボイスメモを録って WAV に残し、PC の中で文字にする。画面の静止画・しおり（F9）も時刻つきで。送るときは M4A に。Claude が読んで議事録にまとめられる",
   "kind": "panel",
   "runtime": "python",
@@ -11,6 +11,7 @@
   "hub": {
     "window": "panel",
     "size": [420, 760],
+    "instanceSize": [960, 720],
     "ui": "ui/panel.js",
     "tile": { "icon": "voiceMemo" },
     "status": { "fn": "status", "every": 5 },
@@ -22,6 +23,9 @@
     { "fn": "mics", "summary": "マイクの一覧" },
     { "fn": "monitors", "summary": "画面（モニター）の一覧" },
     { "fn": "mark", "summary": "しおり（画面を入れていれば、その瞬間の静止画も）" },
+    { "fn": "shots", "summary": "振り返り窓: 録音の静止画の一覧" },
+    { "fn": "view", "summary": "振り返り窓に出す録音を決める" },
+    { "fn": "viewer_open", "summary": "振り返り窓が開いた / 閉じた" },
     { "fn": "screen_consent", "summary": "「画面も」の初回のお知らせを読んだ" },
     { "fn": "start", "summary": "録音を始める（マイク / マイク＋PC の音、画面も）" },
     { "fn": "stop", "summary": "録音を止めて保存する" },

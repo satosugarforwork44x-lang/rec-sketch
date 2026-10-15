@@ -148,7 +148,7 @@ class Decider:
 class Watcher:
     """録音中に動く。start() / stop()、mark() でしおり。"""
 
-    def __init__(self, folder: Path, clock, monitor: int = 1, mss_mod=None, auto: bool = True, interval: float = INTERVAL):
+    def __init__(self, folder: Path, clock, monitor: int = 1, mss_mod=None, auto=True, interval: float = INTERVAL):
         self.folder = Path(folder)
         self.clock = clock                    # () -> 録音の頭からの秒
         self.monitor = int(monitor)
@@ -230,7 +230,8 @@ class Watcher:
                     for t in marks:                       # しおりは待たずに残す（自動の重複にもしない）
                         self._save(img, t, "mark")
                         dec.remember(small)
-                    if self.auto and not marks and dec.feed(small, self.clock()):
+                    auto = self.auto() if callable(self.auto) else self.auto   # 振り返り窓が開いている間は止めることがある
+                    if not marks and auto and dec.feed(small, self.clock()):
                         self._save(img, self.clock(), "auto")
                     self._wake.wait(self.interval)
                     self._wake.clear()
