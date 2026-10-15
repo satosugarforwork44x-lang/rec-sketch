@@ -3,7 +3,7 @@
     python share.py --check
     python share.py <録音.wav> <出力.m4a> [--kbps 64]
 
-・PyAV（BSD-3-Clause。中の FFmpeg は LGPL）を使う。faster-whisper と一緒に入るので、多くの場合は追加で入れる物がない
+・PyAV（BSD-3-Clause）の中の FFmpeg 自身の AAC 圧縮だけを使う（ホイールに入っている x264 などの GPL のライブラリは使わない）。faster-whisper と一緒に入るので、多くの場合は追加で入れる物がない
 ・2ch（左＝自分・右＝相手）は聞きやすいように 1 本（モノラル）に混ぜる。音が割れないように半分ずつ足す
 ・WAV は数秒ずつ読むので、長い録音でもメモリを使わない
 ・進み具合は 1 行 1 つの JSON で標準出力に出す（transcribe.py と同じ形）

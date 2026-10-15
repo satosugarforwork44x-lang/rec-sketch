@@ -115,4 +115,4 @@ The model is downloaded once on first use (small ≈ 0.5 GB, medium ≈ 1.5 GB, 
 | Rec Sketch | PolyForm Noncommercial 1.0.0 |
 | soundcard, numpy | BSD-3-Clause |
 | faster-whisper, CTranslate2, Whisper models | MIT |
-| PyAV | BSD-3-Clause (its bundled FFmpeg is LGPL-2.1 with no GPL parts; Rec Sketch doesn't ship it, it uses the copy you installed) |
+| PyAV | BSD-3-Clause. Its wheels bundle FFmpeg (LGPL) and, depending on the build, GPL libraries such as x264 / x265. Rec Sketch doesn't ship PyAV and only uses FFmpeg's own AAC encoder from it |

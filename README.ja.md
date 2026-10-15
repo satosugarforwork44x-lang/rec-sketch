@@ -132,4 +132,4 @@ CPU だけで動かすので、長い会議は small から試してください
 | soundcard | BSD-3-Clause |
 | numpy | BSD-3-Clause |
 | faster-whisper / CTranslate2 / Whisper のモデル | MIT |
-| PyAV | BSD-3-Clause（中の FFmpeg は LGPL-2.1。GPL の部品は含まない。Rec Sketch は同梱せず、入っているものを使う） |
+| PyAV | BSD-3-Clause。配布されているホイールには FFmpeg（LGPL）と、版によっては x264・x265 などの GPL のライブラリも入っています。Rec Sketch は PyAV を同梱せず、その中の FFmpeg 自身の AAC 圧縮だけを使います |

@@ -1,7 +1,7 @@
 {
   "id": "rec",
   "name": "レックスケッチ",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "summary": "会議（マイクと PC の音）やボイスメモを録って WAV に残し、PC の中で文字にする。送るときは M4A に。Claude が読んで議事録にまとめられる",
   "kind": "panel",
   "runtime": "python",
