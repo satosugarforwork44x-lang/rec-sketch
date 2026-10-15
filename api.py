@@ -125,6 +125,17 @@ def _wav(file: str) -> Path:
     return p
 
 
+def _media(file: str) -> Path:
+    """一覧の録音（.wav、WAV を消したあとは .m4a）。保存先の中に限る。"""
+    name = Path(str(file)).name
+    if name != str(file) or not name.lower().endswith((".wav", ".m4a")):
+        raise RecError(f"録音の名前が違います: {file}")
+    p = _folder() / name
+    if not p.is_file():
+        raise RecError(f"録音が見つかりません: {name}")
+    return p
+
+
 def _prefs() -> dict:
     p = _ctx.store.get("rec", "prefs", {}) or {}
     return {"source": p.get("source") if p.get("source") in ("mic", "both") else "both",
@@ -178,15 +189,22 @@ def consent() -> bool:
 
 # ---------- 一覧 ----------
 def _files() -> list[dict]:
+    """録音の一覧。WAV を消して M4A だけ残した録音も載せる（file はそのとき .m4a の名前）。"""
     f = _folder()
     cur = _rec.path.name if _rec and _rec.running else None
+    heads: dict[str, Path] = {}
+    for p in [*f.glob("*.m4a"), *f.glob("*.wav")]:        # 同じ名前なら .wav が勝つ
+        heads[p.stem] = p
     out = []
-    for p in sorted(f.glob("*.wav"), key=lambda x: x.stat().st_mtime, reverse=True):
+    for p in sorted(heads.values(), key=lambda x: x.stat().st_mtime, reverse=True):
         if p.name == cur:
             continue
-        md, m4a, shots = p.with_suffix(".md"), p.with_suffix(".m4a"), _screen.read_index(p.with_suffix(""))
+        wav, md, m4a = p.with_suffix(".wav"), p.with_suffix(".md"), p.with_suffix(".m4a")
+        shots = _screen.read_index(p.with_suffix(""))
+        has_wav = wav.is_file()
         out.append({"file": p.name, "name": p.stem, "mtime": p.stat().st_mtime, "bytes": p.stat().st_size,
-                    **_recmod.wav_info(p), "text": md.name if md.is_file() else None,
+                    **(_recmod.wav_info(wav) if has_wav else {"seconds": None, "channels": None}), "wav": has_wav,
+                    "text": md.name if md.is_file() else None,
                     "textPath": str(md) if md.is_file() else None,
                     "m4a": m4a.name if m4a.is_file() else None, "m4aPath": str(m4a) if m4a.is_file() else None,
                     "shots": sum(1 for s in shots if s.get("file")), "marks": sum(1 for s in shots if s.get("kind") == "mark"),
@@ -355,13 +373,13 @@ def status() -> dict | None:
 
 
 def blob_path(key: str) -> Path:
-    """/blob/rec/<key>: 一覧で聞く WAV（<ファイル名>.wav）、振り返り窓の静止画（s|<録音名>|<画像>）と小さな見本（th|…）。"""
+    """/blob/rec/<key>: 一覧で聞く録音（<ファイル名>.wav / .m4a）、振り返り窓の静止画（s|<録音名>|<画像>）と小さな見本（th|…）。"""
     key = str(key)
     if key.startswith(("s|", "th|")):
         kind, stem, name = (key.split("|") + ["", ""])[:3]
         img = _shot_path(stem, name)
         return _thumb(img) if kind == "th" else img
-    return _wav(key)
+    return _media(key)
 
 
 def _shot_path(stem: str, name: str) -> Path:
@@ -594,7 +612,56 @@ def share(file: str) -> dict:
 
 def share_path(file: str) -> str:
     """書き出した M4A の場所（エクスプローラーで見せる用）。"""
-    m = _wav(file).with_suffix(".m4a")
+    m = _media(file).with_suffix(".m4a")
     if not m.is_file():
         raise RecError("共有用のファイルがまだありません")
     return str(m)
+
+
+# ---------- ごみ箱へ ----------
+def _to_trash(p: Path) -> None:
+    """ごみ箱へ（Hub と同じ send2trash）。無ければ置き場所の _to_delete へ移す。完全には消さない。"""
+    try:
+        from send2trash import send2trash
+    except ImportError:
+        bin_dir = _folder().parent / "_to_delete"
+        bin_dir.mkdir(exist_ok=True)
+        shutil.move(str(p), str(_unique(bin_dir / p.name)))
+        return
+    send2trash(str(p))
+
+
+def delete(file: str, part: str = "all") -> dict:
+    """録音をごみ箱へ送る。part="all": WAV・文字（.md）・M4A・静止画のフォルダをまとめて。
+    part="wav": WAV だけ（M4A があるときだけ。文字・静止画・M4A は残る）。"""
+    p = _media(file)
+    stem = p.with_suffix("")
+    wav, m4a = p.with_suffix(".wav"), p.with_suffix(".m4a")
+    if _rec is not None and _rec.running and _rec.path.with_suffix("") == stem:
+        raise RecError("録音中です。止めてから消してください")
+    for j, what in ((_job, "文字にしている"), (_share, "書き出している")):
+        if j.get("state") == "running" and Path(j.get("file", "")).with_suffix("") == stem:
+            raise RecError(f"{what}途中です。終わってから消してください")
+    if part == "wav":
+        if not m4a.is_file():
+            raise RecError("M4A がまだありません。先に「共有用に書き出す」で M4A にしてください")
+        targets = [wav] if wav.is_file() else []
+    elif part == "all":
+        targets = [x for x in (wav, p.with_suffix(".md"), m4a) if x.is_file()]
+        if (stem / "shots.json").is_file():         # Rec Sketch が作った静止画のフォルダだけ
+            targets.append(stem)
+    else:
+        raise RecError(f"part が違います: {part}")
+    done, errors = [], []
+    for t in targets:
+        try:
+            _to_trash(t)
+            done.append(t.name)
+        except OSError as e:
+            errors.append(f"{t.name}: {e}")
+    if part == "all":
+        shutil.rmtree(Path(_ctx.data_dir) / "thumbs" / stem.name, ignore_errors=True)
+        v = _ctx.store.get("rec", "view", {}) or {}
+        if v.get("file") and Path(v["file"]).with_suffix("") == stem:
+            view(None)
+    return {"trashed": done, "errors": errors}

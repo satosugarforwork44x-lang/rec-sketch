@@ -23,6 +23,8 @@ const L = EN ? {
   done: (f) => `Text saved: ${f}`, failed: "Transcription failed", cancelled: "Cancelled",
   share: "Export to share (M4A, small enough to send)", shareShow: "Show the shared M4A in Explorer", sharing: "Exporting M4A",
   shared: (f) => `Exported ${f}`, shareFailed: "Export failed",
+  more: "More", delAll: "Move to Recycle Bin (WAV, text, M4A, stills)", delWav: "Move only the WAV to Recycle Bin (keep the M4A)",
+  delWavNo: "Move only the WAV (export M4A first)", trashed: (n) => `Moved to Recycle Bin: ${n}`,
   screen: "Screen", screenTip: "Also keep stills of the screen: automatically when a large part changes and settles, and at once when you press the bookmark key",
   monitorN: (m) => `Display ${m.index} (${m.width}×${m.height})`, markLabel: "Bookmark", markBtn: (k) => `Bookmark (${k})`,
   marked: "Bookmarked", shotsShow: "Look back at the screen stills", lookBack: "Look back",
@@ -46,6 +48,8 @@ const L = EN ? {
   done: (f) => `文字にしました: ${f}`, failed: "文字起こしに失敗しました", cancelled: "やめました",
   share: "共有用に書き出す（M4A。小さくして送れる）", shareShow: "共有用の M4A をエクスプローラーで表示", sharing: "共有用に書き出しています",
   shared: (f) => `共有用に書き出しました: ${f}`, shareFailed: "書き出しに失敗しました",
+  more: "その他", delAll: "ごみ箱へ（WAV・文字・M4A・静止画）", delWav: "WAV だけごみ箱へ（M4A は残す）",
+  delWavNo: "WAV だけごみ箱へ（先に M4A に書き出す）", trashed: (n) => `ごみ箱へ送りました: ${n}`,
   screen: "画面も", screenTip: "画面の静止画も残します。広い範囲が変わって止まったときは自動で、しおりのキーを押したときはすぐに",
   monitorN: (m) => `画面 ${m.index}（${m.width}×${m.height}）`, markLabel: "しおり", markBtn: (k) => `しおり（${k}）`,
   marked: "しおりを付けました", shotsShow: "画面の静止画を振り返る", lookBack: "振り返り",
@@ -199,7 +203,7 @@ export async function mount(el, ctx) {
   // ---------- 一覧 ----------
   // 進み具合だけが変わったときは、一覧を作り直さずに棒と数字だけ直す（作り直すと、押した瞬間のボタンが消えて押せないことがある）
   let listKey = "";
-  const keyOf = () => JSON.stringify([st.files.map((f) => [f.file, f.text, f.m4a, f.shots, f.marks]), st.job?.file, st.job?.state, st.job?.stage, st.job?.who,
+  const keyOf = () => JSON.stringify([st.files.map((f) => [f.file, f.wav, f.text, f.m4a, f.shots, f.marks]), st.job?.file, st.job?.state, st.job?.stage, st.job?.who,
     st.share?.file, st.share?.state, st.canShare, st.whisper?.state, playing, audio.paused]);
   function updateList() {
     if (keyOf() !== listKey) return drawList();
@@ -228,7 +232,7 @@ export async function mount(el, ctx) {
       const act = busy
         ? `<button class="btn rc-cancel" type="button">${L.cancel}</button>`
         : f.text ? `<button class="btn rc-open" type="button" title="${esc(f.text)}">${icons.transcript}<span>${L.openText}</span></button>`
-        : ok ? `<button class="btn rc-totext" type="button"${job?.state === "running" ? " disabled" : ""}>${icons.text}<span>${L.toText}</span></button>` : "";
+        : ok && f.wav ? `<button class="btn rc-totext" type="button"${job?.state === "running" ? " disabled" : ""}>${icons.text}<span>${L.toText}</span></button>` : "";
       const prog = busy ? `<div class="rc-prog" data-k="job"><div class="rc-prog-bar"><i style="width:${Math.round((job.progress || 0) * 100)}%"></i></div>
         <span>${esc(L.stage[job.stage] || L.stage.start)}${job.who ? (EN ? ` (${esc(job.who)})` : `（${esc(job.who)}）`) : ""} <b class="pct">${job.stage === "text" ? Math.round((job.progress || 0) * 100) + "%" : ""}</b></span></div>` : "";
       const sprog = sharing ? `<div class="rc-prog" data-k="share"><div class="rc-prog-bar"><i style="width:${Math.round((sh.progress || 0) * 100)}%"></i></div>
@@ -236,7 +240,7 @@ export async function mount(el, ctx) {
       return `<div class="rc-item${playing === f.file ? " playing" : ""}" role="listitem" data-f="${esc(f.file)}">
         <button class="icon-btn rc-play" type="button" title="${playing === f.file ? L.pause : L.play}">${playing === f.file && !audio.paused ? icons.pause : icons.play}</button>
         <div class="rc-name"><b title="${esc(f.file)}">${esc(f.name)}</b><span>${esc(meta)}</span></div>
-        <div class="rc-act">${act}${f.shotsDir ? `<button class="icon-btn rc-shots" type="button" title="${esc(L.shotsShow)}" aria-label="${esc(L.shotsShow)}">${icons.image}</button>` : ""}${shareBtn}</div>${prog}${sprog}</div>`;
+        <div class="rc-act">${act}${f.shotsDir ? `<button class="icon-btn rc-shots" type="button" title="${esc(L.shotsShow)}" aria-label="${esc(L.shotsShow)}">${icons.image}</button>` : ""}${shareBtn}<button class="icon-btn rc-more" type="button" title="${L.more}" aria-label="${L.more}"${busy || sharing ? " disabled" : ""}>${icons.more}</button></div>${prog}${sprog}</div>`;
     }).join("");
   }
 
@@ -262,12 +266,40 @@ export async function mount(el, ctx) {
       } else if (e.target.closest(".rc-share")) {
         if (f.m4a) await ctx.host.revealPath(f.m4aPath);
         else { st.share = await ctx.call("share", { file: f.file }); schedule(); }
+      } else if (e.target.closest(".rc-more")) {
+        const r = e.target.closest(".rc-more").getBoundingClientRect();
+        return rowMenu(f, r.left, r.bottom);
       } else if (e.target.closest(".rc-cancel")) {
         st.job = await ctx.call("transcribe_cancel");
       }
     } catch (err) { ctx.toast(err.message, "error", 8000); }
     drawList();
   });
+  $(".rc-list").addEventListener("contextmenu", (e) => {
+    const item = e.target.closest(".rc-item");
+    if (!item) return;
+    e.preventDefault();
+    rowMenu(st.files.find((x) => x.file === item.dataset.f), e.clientX, e.clientY);
+  });
+
+  // 行のメニュー（… / 右クリック）。消す物はごみ箱へ（Hub のフォルダ窓と同じく、確かめずに送る。ごみ箱から戻せる）
+  function rowMenu(f, x, y) {
+    if (!f) return;
+    const del = (part) => async () => {
+      if (playing === f.file) { audio.pause(); audio.removeAttribute("src"); playing = null; }
+      try {
+        const r = await ctx.call("delete", { file: f.file, part });
+        if (r.errors?.length) ctx.toast(r.errors.join("\n"), "error", 8000);
+        else ctx.toast(L.trashed(r.trashed.join(", ")));
+      } catch (err) { ctx.toast(err.message, "error", 8000); }
+      await refresh();
+    };
+    ctx.contextMenu([
+      { label: f.m4a ? L.delWav : L.delWavNo, icon: icons.trash, disabled: !f.wav || !f.m4a, onClick: del("wav") },
+      { label: L.delAll, icon: icons.trash, onClick: del("all") },
+    ], x, y);
+  }
+
   audio.addEventListener("play", drawList);
   audio.addEventListener("pause", drawList);
   audio.addEventListener("ended", () => { playing = null; drawList(); });

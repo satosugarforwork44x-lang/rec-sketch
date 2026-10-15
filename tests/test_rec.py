@@ -263,6 +263,29 @@ class RecordTest(unittest.TestCase):
         self.api._set_exclude(False)
         self.assertEqual(calls, [(True, "rec"), (False, "rec")])
 
+    def test_delete_wav_only_keeps_m4a_then_all_goes_to_trash(self):
+        sys.modules["send2trash"] = None                       # ごみ箱が無い環境: _to_delete へ移す
+        self.addCleanup(sys.modules.pop, "send2trash", None)
+        name = self._record("mic", 0.2)["saved"]
+        folder = Path(self.api.state()["folder"])
+        with self.assertRaises(self.api.RecError):
+            self.api.delete(name, "wav")                       # M4A が無いうちは WAV だけは消せない
+        stem = Path(name).stem
+        (folder / f"{stem}.m4a").write_bytes(b"m4a")
+        (folder / f"{stem}.md").write_text("text", encoding="utf-8")
+        (folder / stem).mkdir()
+        (folder / stem / "shots.json").write_text('{"shots": []}', encoding="utf-8")
+        self.assertEqual(self.api.delete(name, "wav")["trashed"], [name])
+        f = self.api.state()["files"][0]
+        self.assertEqual((f["file"], f["wav"], f["text"]), (f"{stem}.m4a", False, f"{stem}.md"))
+        self.assertEqual(self.api.blob_path(f["file"]).suffix, ".m4a")   # M4A で聞ける
+        r = self.api.delete(f["file"], "all")
+        self.assertEqual(sorted(r["trashed"]), sorted([f"{stem}.md", f"{stem}.m4a", stem]))
+        self.assertEqual(self.api.state()["files"], [])
+        self.assertTrue((folder.parent / "_to_delete" / name).is_file())
+        with self.assertRaises(self.api.RecError):
+            self.api.delete("../x.wav")
+
     def test_transcribe_needs_whisper(self):
         name = self._record("mic", 0.2)["saved"]
         self.api._ctx.store.set("rec", "whisper", None)

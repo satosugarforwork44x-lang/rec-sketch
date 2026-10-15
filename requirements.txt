@@ -8,3 +8,5 @@ av>=12            # PyAV: BSD-3-Clause。ホイールには FFmpeg（LGPL）と�
 # 画面の静止画（任意）
 mss>=9          # MIT: 画面を取る
 pillow>=10      # HPND: 縮めて比べる・PNG / JPEG にする
+# ごみ箱へ送る（Hub に入っている物を使う）
+send2trash>=1.8 # BSD-3-Clause。無ければ置き場所の _to_delete へ移す

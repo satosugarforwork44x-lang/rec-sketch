@@ -251,5 +251,5 @@ def read_index(folder: Path) -> list[dict]:
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
         return [s for s in data.get("shots", []) if isinstance(s, dict) and "t" in s and "file" in s]
-    except (OSError, ValueError):
+    except (OSError, ValueError, AttributeError):    # 無い・壊れた・形の違う shots.json
         return []

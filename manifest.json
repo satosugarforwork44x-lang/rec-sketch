@@ -1,7 +1,7 @@
 {
   "id": "rec",
   "name": "レックスケッチ",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "summary": "会議（マイクと PC の音）やボイスメモを録って WAV に残し、PC の中で文字にする。画面の静止画・しおり（F9）も時刻つきで。送るときは M4A に。Claude が読んで議事録にまとめられる",
   "kind": "panel",
   "runtime": "python",
@@ -34,6 +34,7 @@
     { "fn": "transcribe", "summary": "録音を文字にする（faster-whisper、別のプロセス）" },
     { "fn": "transcribe_cancel", "summary": "文字起こしをやめる" },
     { "fn": "share", "summary": "録音を共有用の M4A（AAC・モノラル）にする（PyAV、別のプロセス）" },
+    { "fn": "delete", "summary": "録音をごみ箱へ送る（まとめて / M4A を残して WAV だけ）" },
     { "fn": "share_path", "summary": "書き出した M4A の場所" },
     { "fn": "whisper_find", "summary": "faster-whisper の入った Python を探し直す" },
     { "fn": "status", "summary": "バーに出す録音の経過（録音していなければ null）" }

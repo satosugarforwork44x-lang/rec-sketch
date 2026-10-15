@@ -68,6 +68,7 @@ and puts the text **where Claude can read it**.
 | Voice memo | Record with "Mic" only. Leave the name empty for `<date> 録音.wav`. Transcribe it just like a meeting |
 | List | Play, transcribe, open the text, export to share, show the folder in Explorer |
 | Export to share | The ↑ button on each row makes `<name>.m4a` (AAC 64 kbps, mono, about 0.5 MB per minute) and shows it in Explorer. Hidden if PyAV isn't installed |
+| Delete | … or right-click on a row sends files to the Recycle Bin (recoverable). "All" takes the WAV, text, M4A and stills at once. "Only the WAV" is available once an M4A exists; the text, stills and M4A stay (the row stays and plays the M4A) |
 | Transcribe | faster-whisper (small / medium / large-v3-turbo), Japanese / English / auto. A `.md` with timestamps and Me / Them labels |
 | Bar | `REC 12:34` while recording, `TXT 42%` while transcribing |
 
