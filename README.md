@@ -7,6 +7,9 @@
 An extension app for **[Hub](https://github.com/satosugarforwork44x-lang/desktop-hub)**, the slim bar on the edge of your Windows desktop.
 **Record your microphone and your PC's sound (the other side of a web meeting) to WAV, and transcribe it on your own PC.**
 The text lands in a Hub folder panel, so Claude can read it and write the minutes. The audio never leaves your PC.
+When you want to send a recording to someone, export a small **M4A**.
+
+**It works as a voice memo too.** Choose "Mic", record a thought, and transcribe it later if you like.
 
 ![Rec Sketch — recording mic + PC sound while an earlier meeting is being transcribed](docs/rec-sketch.png)
 
@@ -39,6 +42,8 @@ and puts the text **where Claude can read it**.
 | **Their voice leaking into your mic is removed from Me** | Without headphones the mic hears the speakers too. Lines at the same time with nearly the same words are dropped as echoes |
 | **No always-on noise meter** | The mic is only open while recording; the level bars are just for checking the input |
 | **A one-time consent reminder** | Recording a meeting needs everyone's consent; the panel says so once |
+| **Record in WAV, share in M4A** | WAV is written as it goes (a crash still leaves a playable file) and feeds transcription directly. But an hour of 2-channel audio is about 690 MB, so sharing uses M4A (AAC 64 kbps, mono): about 30 MB, and it plays on Windows, iPhone, Android and Mac |
+| **The shared M4A is mixed down to mono** | Left/right split voices are awkward to listen to. The split only exists for the transcript |
 | **Nothing is overwritten** | `name (2).wav`. The file is written as it goes, so a crash still leaves everything up to that point |
 
 ## Features
@@ -47,9 +52,19 @@ and puts the text **where Claude can read it**.
 |---|---|
 | Record | Mic only (1 ch) or mic + PC sound (2 ch). 48 kHz / 16-bit WAV. Pick the microphone from a list |
 | Levels | Live level bars for you and the PC sound while recording |
-| List | Play, transcribe, open the text, show the folder in Explorer |
+| Voice memo | Record with "Mic" only. Leave the name empty for `<date> 録音.wav`. Transcribe it just like a meeting |
+| List | Play, transcribe, open the text, export to share, show the folder in Explorer |
+| Export to share | The ↑ button on each row makes `<name>.m4a` (AAC 64 kbps, mono, about 0.5 MB per minute) and shows it in Explorer. Hidden if PyAV isn't installed |
 | Transcribe | faster-whisper (small / medium / large-v3-turbo), Japanese / English / auto. A `.md` with timestamps and Me / Them labels |
 | Bar | `REC 12:34` while recording, `TXT 42%` while transcribing |
+
+### Ways to use it
+
+| When | How |
+|---|---|
+| Minutes of a web meeting | Record "Mic + PC sound" → Transcribe → ask Claude for the minutes |
+| Voice memo | Record "Mic" → transcribe if you need text. Ideas, shopping lists, things to do later |
+| Sending a recording | ↑ to export M4A → drag the file Explorer shows into an email or chat |
 
 ## Install
 
@@ -63,7 +78,8 @@ and puts the text **where Claude can read it**.
    py -m pip install faster-whisper
    ```
    It may go into a different Python than Hub's (e.g. `py -3.14 -m pip install faster-whisper`); Rec Sketch looks for it with `py -0p`.
-4. Restart Hub — "Rec Sketch" appears on the bar.
+4. **PyAV**, used to export M4A, comes with faster-whisper. Without transcription, `py -m pip install av` is enough.
+5. Restart Hub — "Rec Sketch" appears on the bar.
 
 Requires Windows 10/11, Python 3.10+, Hub 0.9+.
 
@@ -75,6 +91,7 @@ A **`Rec Sketch`** folder is created next to your other folder panels (change it
 |---|---|
 | `<date> <name>.wav` | The recording |
 | `<date> <name>.md` | The transcript (`[00:01:23] Me: …`) |
+| `<date> <name>.m4a` | The exported copy for sharing (mono) |
 | `REC_FORMAT.md` | A short guide for Claude (placed automatically) |
 
 To get minutes: in Hub's Settings → Claude, share the "Rec Sketch" folder panel, then ask Claude to "summarise <name>.md as minutes".
@@ -98,3 +115,4 @@ The model is downloaded once on first use (small ≈ 0.5 GB, medium ≈ 1.5 GB, 
 | Rec Sketch | PolyForm Noncommercial 1.0.0 |
 | soundcard, numpy | BSD-3-Clause |
 | faster-whisper, CTranslate2, Whisper models | MIT |
+| PyAV | BSD-3-Clause (its bundled FFmpeg is LGPL-2.1 with no GPL parts; Rec Sketch doesn't ship it, it uses the copy you installed) |

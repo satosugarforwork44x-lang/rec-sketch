@@ -60,9 +60,12 @@
 .rc-name { display: grid; min-width: 0; }
 .rc-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 12.5px; }
 .rc-name span { font: 11px var(--font-num); color: var(--faint); font-variant-numeric: tabular-nums; }
+.rc-act { display: flex; align-items: center; gap: 2px; }
+.rc-share.has { color: var(--signal); }
 .rc-act .btn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; font-size: 12px; }
 .rc-act .btn .icon { width: 14px; height: 14px; }
 .rc-prog { grid-column: 2 / -1; display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
+.rc-prog .pct { font-weight: 400; font-variant-numeric: tabular-nums; }
 .rc-prog-bar { height: 4px; border-radius: 2px; background: var(--well); overflow: hidden; }
 .rc-prog-bar i { display: block; height: 100%; background: var(--signal); transition: width .3s; }
 

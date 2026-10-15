@@ -179,6 +179,29 @@ class RecordTest(unittest.TestCase):
         f = next(x for x in self.api.state()["files"] if x["file"] == name)
         self.assertEqual(f["text"], Path(name).stem + ".md")
 
+    @unittest.skipIf(importlib.util.find_spec("av") is None, "PyAV が無い")
+    def test_share_makes_small_mono_m4a_and_never_overwrites(self):
+        import av
+        name = self._record("both", 0.4)["saved"]
+        outs = []
+        for _ in range(2):
+            self.assertEqual(self.api.share(name)["state"], "running")
+            for _ in range(100):
+                if self.api.live()["share"]["state"] != "running":
+                    break
+                time.sleep(0.1)
+            self.assertEqual(self.api.live()["share"]["state"], "done", self.api.live()["share"])
+            outs.append(self.api.live()["share"]["out"])
+        self.assertEqual(outs, [Path(name).stem + ".m4a", Path(name).stem + " (2).m4a"])
+        folder = Path(self.api.state()["folder"])
+        with av.open(str(folder / outs[0])) as c:
+            a = c.streams.audio[0]
+            self.assertEqual((a.codec_context.name, a.codec_context.channels), ("aac", 1))   # 2ch は 1 本に混ぜる
+        self.assertLess((folder / outs[0]).stat().st_size, (folder / name).stat().st_size / 5)
+        f = next(x for x in self.api.state()["files"] if x["file"] == name)
+        self.assertEqual(f["m4a"], outs[0])
+        self.assertEqual(self.api.share_path(name), str(folder / outs[0]))
+
     def test_transcribe_needs_whisper(self):
         name = self._record("mic", 0.2)["saved"]
         self.api._ctx.store.set("rec", "whisper", None)

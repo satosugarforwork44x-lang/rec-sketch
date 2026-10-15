@@ -20,6 +20,8 @@ const L = EN ? {
   wNone: "faster-whisper not found — recording works without it. To transcribe: py -m pip install faster-whisper",
   find: "Search again", stage: { start: "Starting…", model: "Loading the model (first time: downloading)…", audio: "Reading the audio…", text: "Transcribing" },
   done: (f) => `Text saved: ${f}`, failed: "Transcription failed", cancelled: "Cancelled",
+  share: "Export to share (M4A, small enough to send)", shareShow: "Show the shared M4A in Explorer", sharing: "Exporting M4A",
+  shared: (f) => `Exported ${f}`, shareFailed: "Export failed",
   consentT: "Before you record a meeting", consent: "Tell everyone that you are recording and get their consent. Recordings and text stay on this PC (in the Rec Sketch folder).",
   ok: "OK", claude: "Ask Claude to write the minutes from the .md file (share the Rec Sketch folder in Settings → Claude).",
 } : {
@@ -37,6 +39,8 @@ const L = EN ? {
   wNone: "faster-whisper が見つかりません（録音はそのまま使えます）。文字にするには: py -m pip install faster-whisper",
   find: "探し直す", stage: { start: "準備しています…", model: "モデルを読み込み中（初回は取得します）…", audio: "音を読み込み中…", text: "文字にしています" },
   done: (f) => `文字にしました: ${f}`, failed: "文字起こしに失敗しました", cancelled: "やめました",
+  share: "共有用に書き出す（M4A。小さくして送れる）", shareShow: "共有用の M4A をエクスプローラーで表示", sharing: "共有用に書き出しています",
+  shared: (f) => `共有用に書き出しました: ${f}`, shareFailed: "書き出しに失敗しました",
   consentT: "会議を録る前に", consent: "参加者に録音することを伝えて、同意をもらってください。録音と文字はこの PC の中（Rec Sketch フォルダ）にだけ残ります。",
   ok: "わかりました", claude: "議事録は、.md を Claude に読ませてまとめてもらえます（設定 → Claude 連携 で Rec Sketch フォルダを見せる）。",
 };
@@ -88,7 +92,8 @@ export async function mount(el, ctx) {
   const $ = (s) => el.querySelector(s);
   if (EN) el.querySelector(".rc").style.setProperty("--rc-lab", "112px");   // 英語は見出しが長い
   const audio = new Audio();
-  let st = null, playing = null, fastTimer = 0, slowTimer = 0, lastJob = null, micBox = null;
+  let st = null, playing = null, fastTimer = 0, slowTimer = 0, micBox = null;
+  const last = { job: null, share: null };   // 前に見た文字起こし・書き出しの状態（終わったときのお知らせ用）
 
   // ---------- 入力 ----------
   const setSource = (v) => {
@@ -166,24 +171,46 @@ export async function mount(el, ctx) {
   }
 
   // ---------- 一覧 ----------
+  // 進み具合だけが変わったときは、一覧を作り直さずに棒と数字だけ直す（作り直すと、押した瞬間のボタンが消えて押せないことがある）
+  let listKey = "";
+  const keyOf = () => JSON.stringify([st.files.map((f) => [f.file, f.text, f.m4a]), st.job?.file, st.job?.state, st.job?.stage, st.job?.who,
+    st.share?.file, st.share?.state, st.canShare, st.whisper?.state, playing, audio.paused]);
+  function updateList() {
+    if (keyOf() !== listKey) return drawList();
+    for (const [key, j] of [["job", st.job], ["share", st.share]]) {
+      if (j?.state !== "running") continue;
+      const row = [...el.querySelectorAll(".rc-item")].find((x) => x.dataset.f === j.file);
+      const bar = row?.querySelector(`.rc-prog[data-k="${key}"]`);
+      if (!bar) continue;
+      bar.querySelector("i").style.width = `${Math.round((j.progress || 0) * 100)}%`;
+      bar.querySelector(".pct").textContent = key === "job" && j.stage !== "text" ? "" : `${Math.round((j.progress || 0) * 100)}%`;
+    }
+  }
+
   function drawList() {
+    listKey = keyOf();
     const box = $(".rc-list");
     if (!st.files.length) { box.innerHTML = `<p class="rc-empty">${L.empty}</p>`; return; }
     const ok = st.whisper?.state === "ok";
-    const job = st.job;
+    const job = st.job, sh = st.share;
     box.innerHTML = st.files.map((f) => {
       const busy = job?.state === "running" && job.file === f.file;
-      const meta = [f.seconds != null ? clock(f.seconds) : "", f.channels === 2 ? L.ch2 : f.channels === 1 ? L.ch1 : "", when(f.mtime)].filter(Boolean).join(" · ");
+      const sharing = sh?.state === "running" && sh.file === f.file;
+      const meta = [f.seconds != null ? clock(f.seconds) : "", f.channels === 2 ? L.ch2 : f.channels === 1 ? L.ch1 : "", when(f.mtime), f.m4a ? "M4A" : ""].filter(Boolean).join(" · ");
+      const shareBtn = !st.canShare && !f.m4a ? "" : `<button class="icon-btn rc-share${f.m4a ? " has" : ""}" type="button" title="${esc(f.m4a ? L.shareShow : L.share)}"
+        aria-label="${esc(f.m4a ? L.shareShow : L.share)}"${sharing || (!f.m4a && sh?.state === "running") ? " disabled" : ""}>${icons.upload}</button>`;
       const act = busy
         ? `<button class="btn rc-cancel" type="button">${L.cancel}</button>`
         : f.text ? `<button class="btn rc-open" type="button" title="${esc(f.text)}">${icons.transcript}<span>${L.openText}</span></button>`
         : ok ? `<button class="btn rc-totext" type="button"${job?.state === "running" ? " disabled" : ""}>${icons.text}<span>${L.toText}</span></button>` : "";
-      const prog = busy ? `<div class="rc-prog"><div class="rc-prog-bar"><i style="width:${Math.round((job.progress || 0) * 100)}%"></i></div>
-        <span>${esc(L.stage[job.stage] || L.stage.start)}${job.who ? (EN ? ` (${esc(job.who)})` : `（${esc(job.who)}）`) : ""} ${job.stage === "text" ? Math.round((job.progress || 0) * 100) + "%" : ""}</span></div>` : "";
+      const prog = busy ? `<div class="rc-prog" data-k="job"><div class="rc-prog-bar"><i style="width:${Math.round((job.progress || 0) * 100)}%"></i></div>
+        <span>${esc(L.stage[job.stage] || L.stage.start)}${job.who ? (EN ? ` (${esc(job.who)})` : `（${esc(job.who)}）`) : ""} <b class="pct">${job.stage === "text" ? Math.round((job.progress || 0) * 100) + "%" : ""}</b></span></div>` : "";
+      const sprog = sharing ? `<div class="rc-prog" data-k="share"><div class="rc-prog-bar"><i style="width:${Math.round((sh.progress || 0) * 100)}%"></i></div>
+        <span>${esc(L.sharing)} <b class="pct">${Math.round((sh.progress || 0) * 100)}%</b></span></div>` : "";
       return `<div class="rc-item${playing === f.file ? " playing" : ""}" role="listitem" data-f="${esc(f.file)}">
         <button class="icon-btn rc-play" type="button" title="${playing === f.file ? L.pause : L.play}">${playing === f.file && !audio.paused ? icons.pause : icons.play}</button>
         <div class="rc-name"><b title="${esc(f.file)}">${esc(f.name)}</b><span>${esc(meta)}</span></div>
-        <div class="rc-act">${act}</div>${prog}</div>`;
+        <div class="rc-act">${act}${shareBtn}</div>${prog}${sprog}</div>`;
     }).join("");
   }
 
@@ -204,6 +231,9 @@ export async function mount(el, ctx) {
         schedule();
       } else if (e.target.closest(".rc-open")) {
         await ctx.host.openPath(f.textPath);
+      } else if (e.target.closest(".rc-share")) {
+        if (f.m4a) await ctx.host.revealPath(f.m4aPath);
+        else { st.share = await ctx.call("share", { file: f.file }); schedule(); }
       } else if (e.target.closest(".rc-cancel")) {
         st.job = await ctx.call("transcribe_cancel");
       }
@@ -232,16 +262,23 @@ export async function mount(el, ctx) {
   // ---------- 読み直し ----------
   function drawAll() { drawRec(); drawList(); drawWhisper(); }
 
+  // 文字起こし（job）・共有用の書き出し（share）が終わったら知らせる。変わったら true
   function jobChanged() {
-    const j = st.job;
-    if (!j || !lastJob || j.state === lastJob.state) { lastJob = j; return false; }
-    if (lastJob.state === "running") {
-      if (j.state === "done") ctx.toast(L.done(j.out));
-      else if (j.state === "cancelled") ctx.toast(L.cancelled);
-      else if (j.state === "error") ctx.toast(`${L.failed}: ${j.error}`, "error", 12000);
+    let changed = false;
+    for (const key of ["job", "share"]) {
+      const j = st[key], before = last[key];
+      if (j && before && j.state !== before.state) {
+        changed = true;
+        if (before.state === "running") {
+          const msg = key === "job" ? { done: L.done, failed: L.failed } : { done: L.shared, failed: L.shareFailed };
+          if (j.state === "done") ctx.toast(msg.done(j.out));
+          else if (j.state === "cancelled") ctx.toast(L.cancelled);
+          else if (j.state === "error") ctx.toast(`${msg.failed}: ${j.error}`, "error", 12000);
+        }
+      }
+      last[key] = j;
     }
-    lastJob = j;
-    return true;
+    return changed;
   }
 
   async function tick() {
@@ -250,7 +287,7 @@ export async function mount(el, ctx) {
       Object.assign(st, await ctx.call("live"));
       if (was && !st.rec?.running) { if (st.rec?.error || st.lastError) ctx.toast(st.rec?.error || L.stopped, "error", 8000); await refresh(); }
       else if (jobChanged()) await refresh();
-      else { drawRec(); if (st.job?.state === "running") drawList(); drawWhisper(); }
+      else { drawRec(); updateList(); drawWhisper(); }
     } catch { /* 次の回でまた読む */ }
     schedule();
   }
@@ -263,7 +300,7 @@ export async function mount(el, ctx) {
 
   function schedule() {
     clearTimeout(fastTimer);
-    const fast = st.rec?.running ? 150 : st.job?.state === "running" || st.whisper?.state === "checking" ? 1000 : 0;
+    const fast = st.rec?.running ? 150 : st.job?.state === "running" || st.share?.state === "running" || st.whisper?.state === "checking" ? 1000 : 0;
     if (fast && el.isConnected) fastTimer = setTimeout(tick, fast);
   }
 
@@ -273,7 +310,8 @@ export async function mount(el, ctx) {
 
   // ---------- 初回 ----------
   st = await ctx.call("state");
-  lastJob = st.job;
+  last.job = st.job;
+  last.share = st.share;
   setSource(st.prefs.source);
   const mk = (cls, options, key) => $(cls).replaceChildren(selectBox({ options, value: st.prefs[key], onChange: (v) => { st.prefs[key] = v; ctx.call("set_prefs", { [key]: v }).catch(() => {}); } }));
   mk(".rc-model", Object.entries(L.models).map(([value, label]) => ({ value, label })), "model");

@@ -6,6 +6,8 @@
 ・録音は Python 側の別スレッド（recorder.py）。窓を閉じても止まらない。マイク＋PC の音は 2ch（左=自分・右=相手）
 ・文字起こしは別プロセス（transcribe.py）。faster-whisper が入っている Python を自動で探す（Hub と同じ Python でなくてよい）
   見つからなければ文字起こしのボタンを出さないだけで、録音は使える
+・人に送るときは「共有用に書き出す」で M4A（AAC 64kbps・モノラル）にする（share.py、別プロセス、PyAV）
+  録音そのものは WAV のまま（少しずつ書けて途中で落ちても聞ける・文字起こしにそのまま使える）
 """
 from __future__ import annotations
 
@@ -44,11 +46,14 @@ def _load(name: str):
 
 _recmod = _load("recorder")
 TRANSCRIBE = Path(__file__).with_name("transcribe.py")
+SHARE = Path(__file__).with_name("share.py")
 
 _rec = None                 # 今の録音（recorder.Recorder）
 _last_error = ""            # 最後の録音が途中で止まった理由
 _job: dict = {}             # 今の文字起こし
 _proc: subprocess.Popen | None = None
+_share: dict = {}           # 今の共有用の書き出し
+_share_proc: subprocess.Popen | None = None
 _find: dict = {"state": "idle"}
 _lock = threading.Lock()
 
@@ -144,10 +149,11 @@ def _files() -> list[dict]:
     for p in sorted(f.glob("*.wav"), key=lambda x: x.stat().st_mtime, reverse=True):
         if p.name == cur:
             continue
-        md = p.with_suffix(".md")
+        md, m4a = p.with_suffix(".md"), p.with_suffix(".m4a")
         out.append({"file": p.name, "name": p.stem, "mtime": p.stat().st_mtime, "bytes": p.stat().st_size,
                     **_recmod.wav_info(p), "text": md.name if md.is_file() else None,
-                    "textPath": str(md) if md.is_file() else None})
+                    "textPath": str(md) if md.is_file() else None,
+                    "m4a": m4a.name if m4a.is_file() else None, "m4aPath": str(m4a) if m4a.is_file() else None})
     return out[:300]
 
 
@@ -163,7 +169,8 @@ def live() -> dict:
     if _rec is not None and (_rec.running or _rec.error):
         rec = {"running": _rec.running, "file": _rec.path.name, "source": _rec.source, "seconds": round(_rec.seconds, 1),
                "levels": _rec.levels, "started": _rec.started_at, "error": _rec.error}
-    return {"rec": rec, "lastError": _last_error, "job": dict(_job) if _job else None, "whisper": _whisper_state()}
+    return {"rec": rec, "lastError": _last_error, "job": dict(_job) if _job else None, "whisper": _whisper_state(),
+            "share": dict(_share) if _share else None, "canShare": _share_python() is not None}
 
 
 def mics() -> list[dict]:
@@ -353,3 +360,48 @@ def transcribe_cancel() -> dict | None:
         _job["cancelled"] = True
         _proc.kill()
     return dict(_job) if _job else None
+
+
+# ---------- 共有用に書き出す（M4A） ----------
+def _share_python() -> str | None:
+    """PyAV の入った Python。Hub と同じ Python に入っていればそれを、無ければ faster-whisper の入った Python（PyAV も入っている）。"""
+    if importlib.util.find_spec("av") is not None:
+        exe = Path(sys.executable)
+        if exe.name.lower() == "pythonw.exe" and exe.with_name("python.exe").is_file():
+            exe = exe.with_name("python.exe")
+        return str(exe)
+    w = _whisper_state()
+    return w.get("python") if w.get("state") == "ok" else None
+
+
+def share(file: str) -> dict:
+    """録音を共有用の M4A（AAC 64kbps・モノラル）にする。同じフォルダに <名前>.m4a（上書きしない）。"""
+    global _share, _share_proc
+    py = _share_python()
+    if not py:
+        raise RecError("共有用の書き出しには PyAV が必要です。py -m pip install av で入れて、Hub を再起動してください"
+                       "（faster-whisper を入れると一緒に入ります）")
+    wav = _wav(file)
+    with _lock:
+        if _share.get("state") == "running":
+            raise RecError("ほかの録音を書き出しています。終わってからもう一度押してください")
+        out = _unique(wav.with_suffix(".m4a"))
+        _share = {"state": "running", "file": wav.name, "out": out.name, "stage": "share", "progress": 0.0, "error": "",
+                  "started": time.time()}
+        try:
+            _share_proc = subprocess.Popen([py, str(SHARE), str(wav), str(out)], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           text=True, encoding="utf-8", errors="replace", creationflags=NO_WINDOW,
+                                           env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        except OSError as e:
+            _share.update(state="error", error=f"起動できません: {e}")
+            raise RecError(_share["error"]) from None
+        threading.Thread(target=_watch, args=(_share_proc, _share), daemon=True).start()
+    return dict(_share)
+
+
+def share_path(file: str) -> str:
+    """書き出した M4A の場所（エクスプローラーで見せる用）。"""
+    m = _wav(file).with_suffix(".m4a")
+    if not m.is_file():
+        raise RecError("共有用のファイルがまだありません")
+    return str(m)

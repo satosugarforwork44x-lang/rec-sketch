@@ -1,8 +1,8 @@
 {
   "id": "rec",
   "name": "レックスケッチ",
-  "version": "0.2.0",
-  "summary": "マイクと PC の音（Web 会議の相手）を録って WAV に残し、PC の中で文字にする。Claude が読んで議事録にまとめられる",
+  "version": "0.3.0",
+  "summary": "会議（マイクと PC の音）やボイスメモを録って WAV に残し、PC の中で文字にする。送るときは M4A に。Claude が読んで議事録にまとめられる",
   "kind": "panel",
   "runtime": "python",
   "api": "api.py",
@@ -26,8 +26,10 @@
     { "fn": "consent", "summary": "初回のお知らせ（参加者の同意）を読んだ" },
     { "fn": "transcribe", "summary": "録音を文字にする（faster-whisper、別のプロセス）" },
     { "fn": "transcribe_cancel", "summary": "文字起こしをやめる" },
+    { "fn": "share", "summary": "録音を共有用の M4A（AAC・モノラル）にする（PyAV、別のプロセス）" },
+    { "fn": "share_path", "summary": "書き出した M4A の場所" },
     { "fn": "whisper_find", "summary": "faster-whisper の入った Python を探し直す" },
     { "fn": "status", "summary": "バーに出す録音の経過（録音していなければ null）" }
   ],
-  "locales": { "en": { "name": "Rec Sketch", "summary": "Record your mic and your PC's sound (the other side of a web meeting) to WAV, and transcribe it on your PC. Claude can read the text and write the minutes" } }
+  "locales": { "en": { "name": "Rec Sketch", "summary": "Record meetings (mic + PC sound) or voice memos to WAV, transcribe them on your PC and export M4A to share. Claude can read the text and write the minutes" } }
 }
