@@ -1,8 +1,8 @@
 {
   "id": "rec",
   "name": "レックスケッチ",
-  "version": "0.3.1",
-  "summary": "会議（マイクと PC の音）やボイスメモを録って WAV に残し、PC の中で文字にする。送るときは M4A に。Claude が読んで議事録にまとめられる",
+  "version": "0.4.0",
+  "summary": "会議（マイクと PC の音）やボイスメモを録って WAV に残し、PC の中で文字にする。画面の静止画・しおり（F9）も時刻つきで。送るときは M4A に。Claude が読んで議事録にまとめられる",
   "kind": "panel",
   "runtime": "python",
   "api": "api.py",
@@ -10,7 +10,7 @@
   "requires": { "hub": ">=0.9", "moduleApi": 1 },
   "hub": {
     "window": "panel",
-    "size": [420, 680],
+    "size": [420, 760],
     "ui": "ui/panel.js",
     "tile": { "icon": "voiceMemo" },
     "status": { "fn": "status", "every": 5 },
@@ -20,9 +20,12 @@
     { "fn": "state", "summary": "保存先・録音の一覧・今の録音・文字起こしの状態" },
     { "fn": "live", "summary": "録音中の経過・音量と文字起こしの進み具合" },
     { "fn": "mics", "summary": "マイクの一覧" },
-    { "fn": "start", "summary": "録音を始める（マイク / マイク＋PC の音）" },
+    { "fn": "monitors", "summary": "画面（モニター）の一覧" },
+    { "fn": "mark", "summary": "しおり（画面を入れていれば、その瞬間の静止画も）" },
+    { "fn": "screen_consent", "summary": "「画面も」の初回のお知らせを読んだ" },
+    { "fn": "start", "summary": "録音を始める（マイク / マイク＋PC の音、画面も）" },
     { "fn": "stop", "summary": "録音を止めて保存する" },
-    { "fn": "set_prefs", "summary": "入力・マイク・文字起こしのモデルと言語を覚える" },
+    { "fn": "set_prefs", "summary": "入力・マイク・画面・しおりのキー・文字起こしのモデルと言語を覚える" },
     { "fn": "consent", "summary": "初回のお知らせ（参加者の同意）を読んだ" },
     { "fn": "transcribe", "summary": "録音を文字にする（faster-whisper、別のプロセス）" },
     { "fn": "transcribe_cancel", "summary": "文字起こしをやめる" },
@@ -31,5 +34,5 @@
     { "fn": "whisper_find", "summary": "faster-whisper の入った Python を探し直す" },
     { "fn": "status", "summary": "バーに出す録音の経過（録音していなければ null）" }
   ],
-  "locales": { "en": { "name": "Rec Sketch", "summary": "Record meetings (mic + PC sound) or voice memos to WAV, transcribe them on your PC and export M4A to share. Claude can read the text and write the minutes" } }
+  "locales": { "en": { "name": "Rec Sketch", "summary": "Record meetings (mic + PC sound) or voice memos to WAV, transcribe them on your PC keep timestamped screen stills and F9 bookmarks, and export M4A to share. Claude can read the text and write the minutes" } }
 }

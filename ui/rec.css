@@ -40,6 +40,18 @@
 .rc-time { min-width: 116px; font: 300 34px/1 var(--font-num); font-variant-numeric: tabular-nums; letter-spacing: .02em; color: var(--muted); }
 .rc-time.on { color: var(--text); }
 
+/* 画面・しおり */
+.rc-screen { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rc-screen .rc-mon { flex: 1; min-width: 0; }
+.rc-screen .rc-mon[hidden] { display: none; }
+.rc-screen-row[hidden] { display: none; }
+.rc-key .select { width: 120px; }
+.rc-live { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.rc-live[hidden] { display: none; }
+.rc-mark { display: inline-flex; align-items: center; gap: 6px; height: 32px; }
+.rc-mark .icon { width: 15px; height: 15px; color: var(--signal); }
+.rc-counts { font: 12px var(--font-num); color: var(--muted); font-variant-numeric: tabular-nums; }
+
 /* 音量 */
 .rc-meters { display: grid; gap: 6px; }
 .rc-meter { display: grid; grid-template-columns: 44px minmax(0, 1fr) 48px; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
@@ -59,7 +71,7 @@
 .rc-item.playing { background: var(--tint); }
 .rc-name { display: grid; min-width: 0; }
 .rc-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 12.5px; }
-.rc-name span { font: 11px var(--font-num); color: var(--faint); font-variant-numeric: tabular-nums; }
+.rc-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px var(--font-num); color: var(--faint); font-variant-numeric: tabular-nums; }
 .rc-act { display: flex; align-items: center; gap: 2px; }
 .rc-share.has { color: var(--signal); }
 .rc-act .btn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; font-size: 12px; }

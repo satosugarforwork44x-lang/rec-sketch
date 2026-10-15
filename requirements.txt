@@ -5,3 +5,6 @@ numpy>=1.24
 faster-whisper>=1.0   # MIT（中の CTranslate2 も MIT、Whisper のモデルも MIT）
 # 共有用の M4A（任意）。faster-whisper と一緒に入る。文字起こしをしないなら av だけでよい
 av>=12            # PyAV: BSD-3-Clause。ホイールには FFmpeg（LGPL）と、版によっては x264 など GPL のライブラリも入る。使うのは FFmpeg 自身の AAC だけ
+# 画面の静止画（任意）
+mss>=9          # MIT: 画面を取る
+pillow>=10      # HPND: 縮めて比べる・PNG / JPEG にする

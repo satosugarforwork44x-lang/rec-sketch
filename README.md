@@ -8,6 +8,7 @@ An extension app for **[Hub](https://github.com/satosugarforwork44x-lang/desktop
 **Record your microphone and your PC's sound (the other side of a web meeting) to WAV, and transcribe it on your own PC.**
 The text lands in a Hub folder panel, so Claude can read it and write the minutes. The audio never leaves your PC.
 When you want to send a recording to someone, export a small **M4A**.
+**Turn on "Screen" to keep timestamped stills of your display too** — automatically when the slide changes, and at once when you press **F9** to bookmark. Claude reads the text and the stills together.
 
 **It works as a voice memo too.** Choose "Mic", record a thought, and transcribe it later if you like.
 
@@ -42,6 +43,11 @@ and puts the text **where Claude can read it**.
 | **Their voice leaking into your mic is removed from Me** | Without headphones the mic hears the speakers too. Lines at the same time with nearly the same words are dropped as echoes |
 | **No always-on noise meter** | The mic is only open while recording; the level bars are just for checking the input |
 | **A one-time consent reminder** | Recording a meeting needs everyone's consent; the panel says so once |
+| **Stills, not video** | What a meeting needs is "which slide was up when we decided that". Video is heavy and brings encoder licensing headaches; stills are light and Claude can read them directly |
+| **Auto stills only when a large area changes and then settles** | Switching shares, animations and videos never settle, so they're skipped. A face moving in a corner isn't "a large area". Going back to a slide doesn't save it twice |
+| **Bookmark is a single key, F9** (changeable) | Key combos are too much to hit on the spot. It works from any window because it's registered with Windows — **only while recording**, and released when you stop |
+| **Bookmarks have a button too** | Features that only exist as shortcuts are never found. While recording the panel shows "Bookmark (F9)" and the number of stills and bookmarks |
+| **The screen is only captured while recording with "Screen" on** | Notifications and chats show up on screen. You get a one-time warning and choose which display to capture |
 | **Record in WAV, share in M4A** | WAV is written as it goes (a crash still leaves a playable file) and feeds transcription directly. But an hour of 2-channel audio is about 690 MB, so sharing uses M4A (AAC 64 kbps, mono): about 30 MB, and it plays on Windows, iPhone, Android and Mac |
 | **The shared M4A is mixed down to mono** | Left/right split voices are awkward to listen to. The split only exists for the transcript |
 | **Nothing is overwritten** | `name (2).wav`. The file is written as it goes, so a crash still leaves everything up to that point |
@@ -52,6 +58,8 @@ and puts the text **where Claude can read it**.
 |---|---|
 | Record | Mic only (1 ch) or mic + PC sound (2 ch). 48 kHz / 16-bit WAV. Pick the microphone from a list |
 | Levels | Live level bars for you and the PC sound while recording |
+| Screen | Stills of the chosen display when a large area changes and settles (JPEG), at least 10 s apart |
+| Bookmark | F9 (or the button) keeps that moment as PNG and marks 🔖 in the transcript. With "Screen" off it's just the mark |
 | Voice memo | Record with "Mic" only. Leave the name empty for `<date> 録音.wav`. Transcribe it just like a meeting |
 | List | Play, transcribe, open the text, export to share, show the folder in Explorer |
 | Export to share | The ↑ button on each row makes `<name>.m4a` (AAC 64 kbps, mono, about 0.5 MB per minute) and shows it in Explorer. Hidden if PyAV isn't installed |
@@ -64,6 +72,7 @@ and puts the text **where Claude can read it**.
 |---|---|
 | Minutes of a web meeting | Record "Mic + PC sound" → Transcribe → ask Claude for the minutes |
 | Voice memo | Record "Mic" → transcribe if you need text. Ideas, shopping lists, things to do later |
+| Meetings with slides, walkthroughs | Turn on "Screen" → press F9 at the key moments → Transcribe → ask Claude to "focus on the bookmarks" |
 | Sending a recording | ↑ to export M4A → drag the file Explorer shows into an email or chat |
 
 ## Install
@@ -78,8 +87,9 @@ and puts the text **where Claude can read it**.
    py -m pip install faster-whisper
    ```
    It may go into a different Python than Hub's (e.g. `py -3.14 -m pip install faster-whisper`); Rec Sketch looks for it with `py -0p`.
-4. **PyAV**, used to export M4A, comes with faster-whisper. Without transcription, `py -m pip install av` is enough.
-5. Restart Hub — "Rec Sketch" appears on the bar.
+4. Optional, to keep the screen: `py -m pip install mss pillow` (mss is MIT, Pillow is HPND)
+5. **PyAV**, used to export M4A, comes with faster-whisper. Without transcription, `py -m pip install av` is enough.
+6. Restart Hub — "Rec Sketch" appears on the bar.
 
 Requires Windows 10/11, Python 3.10+, Hub 0.9+.
 
@@ -92,6 +102,7 @@ A **`Rec Sketch`** folder is created next to your other folder panels (change it
 | `<date> <name>.wav` | The recording |
 | `<date> <name>.md` | The transcript (`[00:01:23] Me: …`) |
 | `<date> <name>.m4a` | The exported copy for sharing (mono) |
+| `<date> <name>/` | Screen stills (`t001230-auto.jpg` automatic, `t001230-mark.png` bookmark) and `shots.json`; they appear in the transcript in time order |
 | `REC_FORMAT.md` | A short guide for Claude (placed automatically) |
 
 To get minutes: in Hub's Settings → Claude, share the "Rec Sketch" folder panel, then ask Claude to "summarise <name>.md as minutes".
@@ -104,6 +115,7 @@ The model is downloaded once on first use (small ≈ 0.5 GB, medium ≈ 1.5 GB, 
 
 - If recording stops right away, check Windows Settings → Privacy & security → Microphone: microphone access and "Let desktop apps access your microphone" must be on.
 - Tell everyone you are recording and get their consent.
+- Screen stills keep whatever was on the display (notifications, chats, other people's faces, passwords). Check them before sending them to anyone.
 - Automatic transcripts get names and numbers wrong sometimes — check against the audio.
 - Me / Them comes from where the sound was recorded, not from voice recognition. Everyone on the other side is Them.
 - Transcribing in English gives English headings and `Me` / `Them` labels.
@@ -115,4 +127,6 @@ The model is downloaded once on first use (small ≈ 0.5 GB, medium ≈ 1.5 GB, 
 | Rec Sketch | PolyForm Noncommercial 1.0.0 |
 | soundcard, numpy | BSD-3-Clause |
 | faster-whisper, CTranslate2, Whisper models | MIT |
+| mss | MIT |
+| Pillow | HPND (permissive, MIT-like) |
 | PyAV | BSD-3-Clause. Its wheels bundle FFmpeg (LGPL) and, depending on the build, GPL libraries such as x264 / x265. Rec Sketch doesn't ship PyAV and only uses FFmpeg's own AAC encoder from it |

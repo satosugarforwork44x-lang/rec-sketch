@@ -22,6 +22,10 @@ const L = EN ? {
   done: (f) => `Text saved: ${f}`, failed: "Transcription failed", cancelled: "Cancelled",
   share: "Export to share (M4A, small enough to send)", shareShow: "Show the shared M4A in Explorer", sharing: "Exporting M4A",
   shared: (f) => `Exported ${f}`, shareFailed: "Export failed",
+  screen: "Screen", screenTip: "Also keep stills of the screen: automatically when a large part changes and settles, and at once when you press the bookmark key",
+  monitorN: (m) => `Display ${m.index} (${m.width}×${m.height})`, markLabel: "Bookmark", markBtn: (k) => `Bookmark (${k})`,
+  marked: "Bookmarked", shotsShow: "Show the screen stills",
+  screenT: "Before you keep the screen", screenBody: "Stills show whatever is on the display: notifications, chats, other people's faces, passwords. Tell the people on the call, and check the images before you send them to anyone.",
   consentT: "Before you record a meeting", consent: "Tell everyone that you are recording and get their consent. Recordings and text stay on this PC (in the Rec Sketch folder).",
   ok: "OK", claude: "Ask Claude to write the minutes from the .md file (share the Rec Sketch folder in Settings → Claude).",
 } : {
@@ -41,6 +45,10 @@ const L = EN ? {
   done: (f) => `文字にしました: ${f}`, failed: "文字起こしに失敗しました", cancelled: "やめました",
   share: "共有用に書き出す（M4A。小さくして送れる）", shareShow: "共有用の M4A をエクスプローラーで表示", sharing: "共有用に書き出しています",
   shared: (f) => `共有用に書き出しました: ${f}`, shareFailed: "書き出しに失敗しました",
+  screen: "画面も", screenTip: "画面の静止画も残します。広い範囲が変わって止まったときは自動で、しおりのキーを押したときはすぐに",
+  monitorN: (m) => `画面 ${m.index}（${m.width}×${m.height}）`, markLabel: "しおり", markBtn: (k) => `しおり（${k}）`,
+  marked: "しおりを付けました", shotsShow: "画面の静止画のフォルダを表示",
+  screenT: "画面を残す前に", screenBody: "静止画には、画面に映っている物がそのまま残ります（通知・チャット・ほかの人の顔・パスワードなど）。通話の相手に伝え、人に送る前に中身を確かめてください。",
   consentT: "会議を録る前に", consent: "参加者に録音することを伝えて、同意をもらってください。録音と文字はこの PC の中（Rec Sketch フォルダ）にだけ残ります。",
   ok: "わかりました", claude: "議事録は、.md を Claude に読ませてまとめてもらえます（設定 → Claude 連携 で Rec Sketch フォルダを見せる）。",
 };
@@ -71,11 +79,15 @@ export async function mount(el, ctx) {
       </div>
       <label class="rc-field"><span>${L.micDev}</span><div class="rc-mic"></div></label>
       <label class="rc-field"><span>${L.title}</span><input class="rc-title" type="text" maxlength="60" placeholder="${esc(L.titlePh)}"></label>
+      <div class="rc-field rc-screen-row" hidden><span title="${esc(L.screenTip)}">${L.screen}</span>
+        <div class="rc-screen"><button class="switch rc-sw" type="button" role="switch" aria-checked="false" aria-label="${esc(L.screen)}" title="${esc(L.screenTip)}"><span class="knob"></span></button><div class="rc-mon"></div></div></div>
+      <div class="rc-field"><span>${L.markLabel}</span><div class="rc-key"></div></div>
       <div class="rc-main">
         <button class="rc-btn" type="button" aria-label="${L.start}" title="${L.start}"><span class="rc-dot"></span></button>
         <div class="rc-time" aria-live="off">00:00</div>
       </div>
       <div class="rc-meters"></div>
+      <div class="rc-live" hidden><button class="btn rc-mark" type="button">${icons.pin}<span></span></button><span class="rc-counts"></span></div>
       <p class="rc-note"></p>
     </section>
     <div class="rc-listhead"><span>${L.list}</span><button class="icon-btn rc-reveal" type="button" title="${L.openFolder}">${icons.reveal}</button></div>
@@ -86,7 +98,7 @@ export async function mount(el, ctx) {
       <div class="rc-foot-row"><span class="rc-w"></span><button class="btn rc-find" type="button">${icons.refresh}<span>${L.find}</span></button></div>
     </section>
     <div class="rc-consent" hidden><div class="rc-consent-box" role="dialog" aria-modal="true" aria-labelledby="rc-ct">
-      <h2 id="rc-ct">${L.consentT}</h2><p>${L.consent}</p><p class="rc-sub">${L.claude}</p>
+      <h2 id="rc-ct"></h2><p class="rc-cb"></p><p class="rc-sub"></p>
       <div class="btn-row"><button class="btn primary rc-ok" type="button">${L.ok}</button></div></div></div>
   </div>`;
   const $ = (s) => el.querySelector(s);
@@ -128,7 +140,8 @@ export async function mount(el, ctx) {
         if (r.lastError) ctx.toast(r.lastError, "error", 8000);
         $(".rc-title").value = "";
       } else {
-        Object.assign(st, await ctx.call("start", { source: st.prefs.source, mic: st.prefs.mic || "", title: $(".rc-title").value }));
+        Object.assign(st, await ctx.call("start", { source: st.prefs.source, mic: st.prefs.mic || "", title: $(".rc-title").value,
+          screen: !!(st.canScreen && st.prefs.screen), monitor: st.prefs.monitor || 1 }));
       }
     } catch (e) { ctx.toast(e.message, "error", 8000); }
     b.disabled = false;
@@ -147,9 +160,18 @@ export async function mount(el, ctx) {
     el.querySelectorAll(".rc-src button").forEach((x) => (x.disabled = on));
     $(".rc-title").disabled = on;
     if (micBox) micBox.disabled = on;
-    const err = st.lastError || st.micError || "";
-    $(".rc-note").textContent = on ? `${L.keepGoing}${st.rec.source === "both" ? " " + L.headphones : ""}` : err;
-    $(".rc-note").classList.toggle("err", !on && !!err);
+    $(".rc-sw").disabled = on;
+    el.querySelectorAll(".rc-mon .select, .rc-key .select").forEach((x) => (x.disabled = on));
+    const warn = on ? [...(st.rec.keyErrors || []), st.rec.screen?.error].filter(Boolean).join(" ") : "";
+    const err = warn || (!on && (st.lastError || st.micError)) || "";
+    $(".rc-note").textContent = err || (on ? `${L.keepGoing}${st.rec.source === "both" ? " " + L.headphones : ""}` : "");
+    $(".rc-note").classList.toggle("err", !!err);
+    $(".rc-live").hidden = !on;
+    if (on) {
+      $(".rc-mark span").textContent = L.markBtn(st.rec.markKey || "F9");
+      const sc = st.rec.screen || {};
+      $(".rc-counts").textContent = sc.on ? `📷 ${(sc.auto || 0) + (sc.mark || 0)} · 🔖 ${st.rec.marks || 0}` : `🔖 ${st.rec.marks || 0}`;
+    }
     ctx.setStatus(on ? `● ${st.rec.file}` : st.folder || "");
     drawMeters();
   }
@@ -173,7 +195,7 @@ export async function mount(el, ctx) {
   // ---------- 一覧 ----------
   // 進み具合だけが変わったときは、一覧を作り直さずに棒と数字だけ直す（作り直すと、押した瞬間のボタンが消えて押せないことがある）
   let listKey = "";
-  const keyOf = () => JSON.stringify([st.files.map((f) => [f.file, f.text, f.m4a]), st.job?.file, st.job?.state, st.job?.stage, st.job?.who,
+  const keyOf = () => JSON.stringify([st.files.map((f) => [f.file, f.text, f.m4a, f.shots, f.marks]), st.job?.file, st.job?.state, st.job?.stage, st.job?.who,
     st.share?.file, st.share?.state, st.canShare, st.whisper?.state, playing, audio.paused]);
   function updateList() {
     if (keyOf() !== listKey) return drawList();
@@ -196,7 +218,7 @@ export async function mount(el, ctx) {
     box.innerHTML = st.files.map((f) => {
       const busy = job?.state === "running" && job.file === f.file;
       const sharing = sh?.state === "running" && sh.file === f.file;
-      const meta = [f.seconds != null ? clock(f.seconds) : "", f.channels === 2 ? L.ch2 : f.channels === 1 ? L.ch1 : "", when(f.mtime), f.m4a ? "M4A" : ""].filter(Boolean).join(" · ");
+      const meta = [f.seconds != null ? clock(f.seconds) : "", f.channels === 2 ? L.ch2 : f.channels === 1 ? L.ch1 : "", when(f.mtime), f.m4a ? "M4A" : "", f.shots ? `📷 ${f.shots}` : "", f.marks ? `🔖 ${f.marks}` : ""].filter(Boolean).join(" · ");
       const shareBtn = !st.canShare && !f.m4a ? "" : `<button class="icon-btn rc-share${f.m4a ? " has" : ""}" type="button" title="${esc(f.m4a ? L.shareShow : L.share)}"
         aria-label="${esc(f.m4a ? L.shareShow : L.share)}"${sharing || (!f.m4a && sh?.state === "running") ? " disabled" : ""}>${icons.upload}</button>`;
       const act = busy
@@ -210,7 +232,7 @@ export async function mount(el, ctx) {
       return `<div class="rc-item${playing === f.file ? " playing" : ""}" role="listitem" data-f="${esc(f.file)}">
         <button class="icon-btn rc-play" type="button" title="${playing === f.file ? L.pause : L.play}">${playing === f.file && !audio.paused ? icons.pause : icons.play}</button>
         <div class="rc-name"><b title="${esc(f.file)}">${esc(f.name)}</b><span>${esc(meta)}</span></div>
-        <div class="rc-act">${act}${shareBtn}</div>${prog}${sprog}</div>`;
+        <div class="rc-act">${act}${f.shotsDir ? `<button class="icon-btn rc-shots" type="button" title="${esc(L.shotsShow)}" aria-label="${esc(L.shotsShow)}">${icons.image}</button>` : ""}${shareBtn}</div>${prog}${sprog}</div>`;
     }).join("");
   }
 
@@ -231,6 +253,8 @@ export async function mount(el, ctx) {
         schedule();
       } else if (e.target.closest(".rc-open")) {
         await ctx.host.openPath(f.textPath);
+      } else if (e.target.closest(".rc-shots")) {
+        await ctx.host.revealPath(f.shotsDir);
       } else if (e.target.closest(".rc-share")) {
         if (f.m4a) await ctx.host.revealPath(f.m4aPath);
         else { st.share = await ctx.call("share", { file: f.file }); schedule(); }
@@ -245,6 +269,52 @@ export async function mount(el, ctx) {
   audio.addEventListener("ended", () => { playing = null; drawList(); });
 
   $(".rc-reveal").addEventListener("click", () => ctx.host.revealPath(st.folder).catch((e) => ctx.toast(e.message, "error")));
+
+  // ---------- 画面・しおり ----------
+  // お知らせ（初回の同意・画面の注意）。OK を押したら onOk
+  function notice(title, body, sub, onOk) {
+    $("#rc-ct").textContent = title;
+    $(".rc-cb").textContent = body;
+    $(".rc-sub").textContent = sub || "";
+    $(".rc-consent").hidden = false;
+    const ok = $(".rc-ok");
+    ok.onclick = async () => { $(".rc-consent").hidden = true; await onOk?.(); };
+    ok.focus();
+  }
+
+  const setScreen = (v) => { st.prefs.screen = v; $(".rc-sw").setAttribute("aria-checked", String(v)); $(".rc-mon").hidden = !v; };
+  $(".rc-sw").addEventListener("click", () => {
+    if (st.rec?.running) return;
+    const v = !st.prefs.screen;
+    const apply = () => { setScreen(v); ctx.call("set_prefs", { screen: v }).catch(() => {}); };
+    if (v && !st.screenConsent) notice(L.screenT, L.screenBody, "", async () => { st.screenConsent = true; await ctx.call("screen_consent").catch(() => {}); apply(); });
+    else apply();
+  });
+
+  async function loadScreen() {
+    if (!st.canScreen) return;
+    $(".rc-screen-row").hidden = false;
+    setScreen(!!st.prefs.screen);
+    try {
+      const mons = await ctx.call("monitors");
+      $(".rc-mon").replaceChildren(selectBox({ options: mons.map((m) => ({ value: m.index, label: L.monitorN(m) })), value: st.prefs.monitor || 1,
+        onChange: (v) => { st.prefs.monitor = Number(v); ctx.call("set_prefs", { monitor: Number(v) }).catch(() => {}); } }));
+    } catch (e) { st.micError = e.message; drawRec(); }
+  }
+
+  function loadKey() {
+    const box = selectBox({ options: (st.keyChoices || ["F9"]).map((k) => ({ value: k, label: k })), value: st.prefs.markKey || "F9",
+      labelFor: (v) => v,
+      onChange: async (v) => {
+        try { st.prefs = await ctx.call("set_prefs", { markKey: v }); }
+        catch (e) { ctx.toast(e.message, "error", 6000); box.setValue(st.prefs.markKey); }
+      } });
+    $(".rc-key").replaceChildren(box);
+  }
+
+  $(".rc-mark").addEventListener("click", async () => {
+    try { await ctx.call("mark"); ctx.toast(L.marked, "info", 1500); tick(); } catch (e) { ctx.toast(e.message, "error"); }
+  });
 
   // ---------- 文字起こしの設定 ----------
   function drawWhisper() {
@@ -318,10 +388,8 @@ export async function mount(el, ctx) {
   mk(".rc-lang", Object.entries(L.langs).map(([value, label]) => ({ value, label })), "lang");
   drawAll();
   loadMics();
+  loadScreen();
+  loadKey();
   schedule();
-  if (!st.consent) {
-    $(".rc-consent").hidden = false;
-    $(".rc-ok").focus();
-    $(".rc-ok").addEventListener("click", async () => { $(".rc-consent").hidden = true; await ctx.call("consent").catch(() => {}); });
-  }
+  if (!st.consent) notice(L.consentT, L.consent, L.claude, () => ctx.call("consent").catch(() => {}));
 }

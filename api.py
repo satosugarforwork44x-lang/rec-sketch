@@ -6,6 +6,8 @@
 ・録音は Python 側の別スレッド（recorder.py）。窓を閉じても止まらない。マイク＋PC の音は 2ch（左=自分・右=相手）
 ・文字起こしは別プロセス（transcribe.py）。faster-whisper が入っている Python を自動で探す（Hub と同じ Python でなくてよい）
   見つからなければ文字起こしのボタンを出さないだけで、録音は使える
+・「画面も」を入れて録ると、画面の静止画を「<録音名>」フォルダに残す（screen.py。広く変わって止まったとき自動で・しおりのキーですぐ）
+  しおりのキー（既定 F9）は録音中だけ Windows 全体に登録する（hotkey.py）。画面を入れていなくても、しおりは文字起こしに印として残る
 ・人に送るときは「共有用に書き出す」で M4A（AAC 64kbps・モノラル）にする（share.py、別プロセス、PyAV）
   録音そのものは WAV のまま（少しずつ書けて途中で落ちても聞ける・文字起こしにそのまま使える）
 """
@@ -45,11 +47,17 @@ def _load(name: str):
 
 
 _recmod = _load("recorder")
+_screen = _load("screen")
+_hotkey = _load("hotkey")
 TRANSCRIBE = Path(__file__).with_name("transcribe.py")
 SHARE = Path(__file__).with_name("share.py")
 
 _rec = None                 # 今の録音（recorder.Recorder）
 _last_error = ""            # 最後の録音が途中で止まった理由
+_watcher = None             # 今の録音の画面（screen.Watcher）。画面を入れていなければ None
+_keys = None                # 今の録音の全体キー（hotkey.Hotkeys）
+_marks: list[dict] = []     # 画面を入れていない録音のしおり（時刻だけ）
+_key_errors: list[str] = []
 _job: dict = {}             # 今の文字起こし
 _proc: subprocess.Popen | None = None
 _share: dict = {}           # 今の共有用の書き出し
@@ -118,11 +126,29 @@ def _prefs() -> dict:
     p = _ctx.store.get("rec", "prefs", {}) or {}
     return {"source": p.get("source") if p.get("source") in ("mic", "both") else "both",
             "mic": p.get("mic") or "", "model": p.get("model") if p.get("model") in MODELS else "small",
-            "lang": p.get("lang") if p.get("lang") in LANGS else "ja"}
+            "lang": p.get("lang") if p.get("lang") in LANGS else "ja",
+            "screen": bool(p.get("screen", False)), "monitor": int(p.get("monitor") or 1),
+            "markKey": p.get("markKey") or "F9", "clipKey": p.get("clipKey") or "F10"}
 
 
-def set_prefs(source: str | None = None, mic: str | None = None, model: str | None = None, lang: str | None = None) -> dict:
+def set_prefs(source: str | None = None, mic: str | None = None, model: str | None = None, lang: str | None = None,
+              screen: bool | None = None, monitor: int | None = None, markKey: str | None = None) -> dict:  # noqa: N803
     p = _prefs()
+    if screen is not None:
+        p["screen"] = bool(screen)
+    if monitor is not None:
+        try:
+            p["monitor"] = max(1, min(16, int(monitor)))
+        except (TypeError, ValueError):
+            pass
+    if markKey is not None:
+        try:
+            k = _hotkey.normalize(markKey)
+        except _hotkey.HotkeyError as e:
+            raise RecError(str(e)) from None
+        if k == p.get("clipKey", "F10"):
+            raise RecError(f"{k} は動画のキーと同じです")
+        p["markKey"] = k
     if source in ("mic", "both"):
         p["source"] = source
     if mic is not None:
@@ -133,6 +159,12 @@ def set_prefs(source: str | None = None, mic: str | None = None, model: str | No
         p["lang"] = lang
     _ctx.store.set("rec", "prefs", p)
     return p
+
+
+def screen_consent() -> bool:
+    """「画面も」の初回のお知らせを読んだ印。"""
+    _ctx.store.set("rec", "screenConsent", True)
+    return True
 
 
 def consent() -> bool:
@@ -149,18 +181,22 @@ def _files() -> list[dict]:
     for p in sorted(f.glob("*.wav"), key=lambda x: x.stat().st_mtime, reverse=True):
         if p.name == cur:
             continue
-        md, m4a = p.with_suffix(".md"), p.with_suffix(".m4a")
+        md, m4a, shots = p.with_suffix(".md"), p.with_suffix(".m4a"), _screen.read_index(p.with_suffix(""))
         out.append({"file": p.name, "name": p.stem, "mtime": p.stat().st_mtime, "bytes": p.stat().st_size,
                     **_recmod.wav_info(p), "text": md.name if md.is_file() else None,
                     "textPath": str(md) if md.is_file() else None,
-                    "m4a": m4a.name if m4a.is_file() else None, "m4aPath": str(m4a) if m4a.is_file() else None})
+                    "m4a": m4a.name if m4a.is_file() else None, "m4aPath": str(m4a) if m4a.is_file() else None,
+                    "shots": sum(1 for s in shots if s.get("file")), "marks": sum(1 for s in shots if s.get("kind") == "mark"),
+                    "shotsDir": str(p.with_suffix("")) if shots else None})
     return out[:300]
 
 
 def state() -> dict:
     _whisper_autofind()
     return {"folder": str(_folder()), "files": _files(), "prefs": _prefs(),
-            "consent": bool(_ctx.store.get("rec", "consent", False)), **live()}
+            "consent": bool(_ctx.store.get("rec", "consent", False)),
+            "screenConsent": bool(_ctx.store.get("rec", "screenConsent", False)),
+            "canScreen": _screen.available(), "keyChoices": _hotkey.CHOICES, **live()}
 
 
 def live() -> dict:
@@ -168,7 +204,10 @@ def live() -> dict:
     rec = None
     if _rec is not None and (_rec.running or _rec.error):
         rec = {"running": _rec.running, "file": _rec.path.name, "source": _rec.source, "seconds": round(_rec.seconds, 1),
-               "levels": _rec.levels, "started": _rec.started_at, "error": _rec.error}
+               "levels": _rec.levels, "started": _rec.started_at, "error": _rec.error,
+               "screen": ({"on": True, **_watcher.counts(), "error": _watcher.error} if _watcher is not None else {"on": False}),
+               "marks": (_watcher.counts()["mark"] if _watcher is not None else len(_marks)),
+               "markKey": _prefs()["markKey"], "keyErrors": list(_key_errors)}
     return {"rec": rec, "lastError": _last_error, "job": dict(_job) if _job else None, "whisper": _whisper_state(),
             "share": dict(_share) if _share else None, "canShare": _share_python() is not None}
 
@@ -181,7 +220,16 @@ def mics() -> list[dict]:
 
 
 # ---------- 録る ----------
-def start(source: str = "both", mic: str = "", title: str = "") -> dict:
+def monitors() -> list[dict]:
+    try:
+        return _screen.monitors()
+    except _screen.ScreenError as e:
+        raise RecError(str(e)) from None
+    except Exception as e:  # noqa: BLE001
+        raise RecError(f"画面を調べられません: {e}") from None
+
+
+def start(source: str = "both", mic: str = "", title: str = "", screen: bool = False, monitor: int = 1) -> dict:
     global _rec, _last_error
     with _lock:
         if _rec is not None and _rec.running:
@@ -195,7 +243,44 @@ def start(source: str = "both", mic: str = "", title: str = "") -> dict:
         except _recmod.RecorderError as e:
             raise RecError(str(e)) from None
         _rec, _last_error = r, ""
+        set_prefs(screen=bool(screen), monitor=monitor)
+        _start_extras(r, bool(screen), monitor)
     return live()
+
+
+def _start_extras(r, screen: bool, monitor: int) -> None:
+    """画面としおりのキー。うまくいかなくても録音は続ける（理由は live() の keyErrors・screen.error で画面に出す）。"""
+    global _watcher, _keys, _marks, _key_errors
+    _watcher, _marks, _key_errors = None, [], []
+    if screen:
+        w = _screen.Watcher(r.path.with_suffix(""), clock=lambda: r.seconds, monitor=monitor)
+        try:
+            w.start()
+            _watcher = w
+        except _screen.ScreenError as e:
+            _key_errors.append(str(e))
+    keys = _hotkey.Hotkeys({_prefs()["markKey"]: mark})
+    _key_errors += keys.start()
+    _keys = keys
+
+
+def mark() -> dict:
+    """しおり（キーかボタン）。画面を入れていれば、その瞬間の静止画も残る。"""
+    r = _rec
+    if r is None or not r.running:
+        raise RecError("録音していないときは、しおりは付けられません")
+    if _watcher is not None:
+        t = _watcher.mark()
+    else:
+        t = round(r.seconds, 2)
+        _marks.append({"t": t, "kind": "mark", "file": None})
+        _write_marks(r.path.with_suffix(""))
+    return {"t": t}
+
+
+def _write_marks(folder: Path) -> None:
+    folder.mkdir(parents=True, exist_ok=True)
+    _write_atomic(folder / "shots.json", json.dumps({"format": "rec-shots/1", "shots": _marks}, ensure_ascii=False, indent=1))
 
 
 def stop() -> dict:
@@ -204,6 +289,13 @@ def stop() -> dict:
         r = _rec
         if r is None:
             return state()
+        global _watcher, _keys
+        if _keys is not None:
+            _keys.stop()
+            _keys = None
+        if _watcher is not None:
+            _watcher.stop()
+            _watcher = None
         r.stop()
         _last_error = r.error
         _rec = None

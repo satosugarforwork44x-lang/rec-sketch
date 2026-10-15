@@ -202,6 +202,30 @@ class RecordTest(unittest.TestCase):
         self.assertEqual(f["m4a"], outs[0])
         self.assertEqual(self.api.share_path(name), str(folder / outs[0]))
 
+    def test_bookmarks_without_screen_are_kept_as_times(self):
+        self.api.start(source="mic")
+        time.sleep(0.2)
+        self.api.mark()
+        self.assertEqual(self.api.live()["rec"]["marks"], 1)
+        name = self.api.stop()["saved"]
+        f = next(x for x in self.api.state()["files"] if x["file"] == name)
+        self.assertEqual((f["marks"], f["shots"]), (1, 0))
+
+    @unittest.skipIf(importlib.util.find_spec("PIL") is None, "Pillow が無い")
+    def test_screen_on_keeps_stills_next_to_the_recording(self):
+        fake = _FakeMSS()
+        self.api._screen.load_backend = lambda: fake
+        self.api.start(source="mic", screen=True, monitor=1)
+        time.sleep(0.3)
+        self.api.mark()
+        time.sleep(0.8)
+        live = self.api.live()["rec"]
+        self.assertTrue(live["screen"]["on"])
+        name = self.api.stop()["saved"]
+        f = next(x for x in self.api.state()["files"] if x["file"] == name)
+        self.assertGreaterEqual(f["shots"], 1)
+        self.assertTrue(Path(f["shotsDir"]).is_dir())
+
     def test_transcribe_needs_whisper(self):
         name = self._record("mic", 0.2)["saved"]
         self.api._ctx.store.set("rec", "whisper", None)
@@ -287,3 +311,129 @@ class MixFormatPatchTest(unittest.TestCase):
         self.assertEqual(guid.hex(), "0300000000001000800000aa00389b71")
         self.assertTrue(seen["flags"] & 0x00020000)          # ループバック
         self.assertEqual((c.samplerate, c.channelmap), (48000, [0]))
+
+
+# ---------- 画面（にせの mss） ----------
+class _FakeShot:
+    def __init__(self, img):
+        self.size, self.rgb = img.size, img.tobytes()
+
+
+class _FakeMSSInst:
+    def __init__(self, owner):
+        self.owner = owner
+        self.monitors = [{"left": 0, "top": 0, "width": 320, "height": 240}, {"left": 0, "top": 0, "width": 320, "height": 240}]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def grab(self, mon):
+        return _FakeShot(self.owner.frame())
+
+
+class _FakeMSS:
+    """frame() が今の画面。テストから scene を差し替える。"""
+
+    def __init__(self):
+        self.scene = "a"
+        self.n = 0
+
+    def MSS(self):  # noqa: N802
+        return _FakeMSSInst(self)
+
+    def frame(self):
+        from PIL import Image, ImageDraw
+        self.n += 1
+        img = Image.new("RGB", (320, 240), (240, 240, 240))
+        d = ImageDraw.Draw(img)
+        if self.scene == "a":
+            d.rectangle([20, 20, 300, 120], fill=(30, 60, 200))
+        elif self.scene == "b":
+            d.rectangle([20, 100, 300, 230], fill=(200, 40, 40))
+        elif self.scene == "moving":
+            x = (self.n * 37) % 260
+            d.rectangle([x, 0, x + 60, 240], fill=(0, 0, 0))
+        d.rectangle([280, 200, 318, 238], fill=((self.n * 50) % 255, 0, 0))   # 隅の小さな「顔」はいつも動く
+        return img
+
+
+@unittest.skipIf(importlib.util.find_spec("PIL") is None, "Pillow が無い")
+class ScreenTest(unittest.TestCase):
+    def setUp(self):
+        self.s = _load("rec_screen_test", "screen.py")
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def run_scenes(self, scenes, mark_at=()):
+        """scenes: [(場面, 秒)]。時計は 0.5 秒ずつ進める（実時間は待たない）。"""
+        fake, clock = _FakeMSS(), [0.0]
+        w = self.s.Watcher(self.tmp / "rec", clock=lambda: clock[0], mss_mod=fake, interval=0.001)
+        dec, saved = self.s.Decider(), []
+        # Watcher のスレッドを使わず、同じ手順を時計つきで回す（決め方を確かめる）
+        with fake.MSS() as m:
+            for scene, secs in scenes:
+                fake.scene = scene
+                for _ in range(int(secs / 0.5)):
+                    clock[0] += 0.5
+                    img = w._grab(m)
+                    if any(abs(clock[0] - t) < 0.25 for t in mark_at):
+                        w._save(img, clock[0], "mark")
+                        dec.remember(self.s.small_of(img))
+                    elif dec.feed(self.s.small_of(img), clock[0]):
+                        w._save(img, clock[0], "auto")
+        return w.shots
+
+    def test_slide_change_is_kept_once_after_it_settles(self):
+        shots = self.run_scenes([("a", 15), ("b", 15)])
+        self.assertEqual([s["kind"] for s in shots], ["auto", "auto"])
+        self.assertGreaterEqual(shots[1]["t"], 15 + self.s.STABLE_SEC)       # 止まってから
+
+    def test_corner_face_and_moving_video_are_not_kept(self):
+        shots = self.run_scenes([("a", 15), ("moving", 20)])
+        self.assertEqual(len(shots), 1)
+
+    def test_going_back_to_the_same_slide_is_not_kept_again(self):
+        shots = self.run_scenes([("a", 15), ("b", 15), ("a", 15)])
+        self.assertEqual(len(shots), 2)
+
+    def test_bookmark_is_kept_at_once_as_png_and_indexed(self):
+        shots = self.run_scenes([("a", 5)], mark_at=(2.0,))
+        marks = [s for s in shots if s["kind"] == "mark"]
+        self.assertEqual(len(marks), 1)
+        self.assertTrue(marks[0]["file"].endswith("-mark.png"))
+        self.assertEqual(self.s.read_index(self.tmp / "rec")[0]["file"], marks[0]["file"])
+
+    def test_watcher_thread_runs_and_marks(self):
+        fake, t = _FakeMSS(), [0.0]
+        w = self.s.Watcher(self.tmp / "rec2", clock=lambda: t[0], mss_mod=fake, interval=0.01)
+        w.start()
+        t[0] = 3.0
+        w.mark()
+        time.sleep(0.3)
+        w.stop()
+        self.assertEqual(w.counts()["mark"], 1, w.error)
+        self.assertTrue((self.tmp / "rec2" / w.shots[0]["file"]).is_file())
+
+
+class HotkeyTest(unittest.TestCase):
+    def test_parse_and_normalize(self):
+        h = _load("rec_hotkey_test", "hotkey.py")
+        self.assertEqual(h.parse("F9"), (0, 0x78))
+        self.assertEqual(h.parse("ctrl+shift+F10"), (0x6, 0x79))
+        self.assertEqual(h.normalize("scrolllock"), "ScrollLock")
+        with self.assertRaises(h.HotkeyError):
+            h.parse("Ctrl+Q")
+
+
+class TranscriptShotsTest(unittest.TestCase):
+    def test_stills_and_bookmarks_go_between_lines_in_time_order(self):
+        t = _load("rec_transcribe_shots", "transcribe.py")
+        md = t.render_md("会議", "2026-10-15 1000 会議.wav", 60, True, "small", "ja",
+                         [{"start": 3, "end": 4, "who": "自分", "text": "始めます"}, {"start": 30, "end": 31, "who": "相手", "text": "はい"}],
+                         [{"t": 12, "kind": "auto", "file": "t000012-auto.jpg"}, {"t": 40, "kind": "mark", "file": None}])
+        lines = [l for l in md.splitlines() if l.startswith("[")]
+        self.assertEqual(lines[1], "[00:00:12] 📷 ![](<2026-10-15 1000 会議/t000012-auto.jpg>)")
+        self.assertEqual(lines[3], "[00:00:40] 🔖 しおり")
+        self.assertIn("しおり 1 個", md)

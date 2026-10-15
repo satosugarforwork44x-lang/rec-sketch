@@ -77,14 +77,31 @@ def _cjk(ch: str) -> bool:
     return bool(ch) and ord(ch) >= 0x3000
 
 
-def render_md(title: str, wav_name: str, seconds: float, two: bool, model: str, lang: str, items: list[dict]) -> str:
+def read_shots(wav: Path) -> list[dict]:
+    """<録音名>/shots.json（画面の静止画としおり。Rec Sketch が録音中に書く）。無ければ空。"""
+    try:
+        data = json.loads((wav.with_suffix("") / "shots.json").read_text(encoding="utf-8"))
+        return [x for x in data.get("shots", []) if isinstance(x, dict) and isinstance(x.get("t"), (int, float))]
+    except (OSError, ValueError):
+        return []
+
+
+def shot_line(shot: dict, folder: str, en: bool) -> str:
+    """[00:12:30] 🔖 しおり ![](<録音名/t001230-mark.png>)。画像の場所は .md から見た相対パス（空白があるので <> で囲む）。"""
+    head = ("🔖 Bookmark" if en else "🔖 しおり") if shot.get("kind") == "mark" else "📷"
+    img = f" ![](<{folder}/{shot['file']}>)" if shot.get("file") else ""
+    return f"[{stamp(shot['t'])}] {head}{img}"
+
+
+def render_md(title: str, wav_name: str, seconds: float, two: bool, model: str, lang: str, items: list[dict],
+              shots: list[dict] | None = None) -> str:
     if lang == "en":
         head = [f"# {title}", "",
                 f"- Recording: {wav_name} ({stamp(seconds)}, {'mic + PC sound' if two else 'mic'})",
                 f"- Transcribed: faster-whisper {model} (en), {time.strftime('%Y-%m-%d %H:%M')}"]
         if two:
             head.append("- Speakers: Me = microphone / Them = PC sound (split by input, not by voice)")
-        head += ["- Automatic transcript. Check names and numbers against the recording", "", "---", ""]
+        head += ["- Automatic transcript. Check names and numbers against the recording"]
         empty = "(No speech was found)"
     else:
         head = [f"# {title}", "",
@@ -92,9 +109,18 @@ def render_md(title: str, wav_name: str, seconds: float, two: bool, model: str, 
                 f"- 文字起こし: faster-whisper {model}（{lang or '自動'}）、{time.strftime('%Y-%m-%d %H:%M')}"]
         if two:
             head.append("- 話者: 自分＝マイク／相手＝PC の音（声で聞き分けたのではなく、録った入口で分けています）")
-        head += ["- 自動の文字起こしです。固有名詞・数字は録音で確かめてください", "", "---", ""]
+        head += ["- 自動の文字起こしです。固有名詞・数字は録音で確かめてください"]
         empty = "（文字にできる声がありませんでした）"
-    body = [f"[{stamp(i['start'])}] " + (f"{i['who']}: " if i.get("who") else "") + i["text"] for i in items]
+    en, shots = lang == "en", shots or []
+    folder = Path(wav_name).stem
+    n_img, n_mark = sum(1 for x in shots if x.get("file")), sum(1 for x in shots if x.get("kind") == "mark")
+    if shots:
+        head.append(f"- Screen: {n_img} images in `{folder}/`, {n_mark} bookmarks" if en
+                    else f"- 画面: 静止画 {n_img} 枚（`{folder}/`）、しおり {n_mark} 個")
+    head += ["", "---", ""]
+    rows = [(i["start"], 1, f"[{stamp(i['start'])}] " + (f"{i['who']}: " if i.get("who") else "") + i["text"]) for i in items]
+    rows += [(float(x["t"]), 0, shot_line(x, folder, en)) for x in shots]
+    body = [r[2] for r in sorted(rows, key=lambda r: (r[0], r[1]))]
     return "\n".join(head + (body or [empty])) + "\n"
 
 
@@ -191,7 +217,7 @@ def run(wav: Path, out: Path, model_name: str, lang: str, title: str) -> int:
     if two:
         found[0] = drop_echo(found[0], found[1])
     items = merge([s for segs in found for s in segs])
-    write_atomic(out, render_md(title or wav.stem, wav.name, seconds, two, model_name, lang, items))
+    write_atomic(out, render_md(title or wav.stem, wav.name, seconds, two, model_name, lang, items, read_shots(wav)))
     emit(type="done", out=str(out), lines=len(items))
     return 0
 
